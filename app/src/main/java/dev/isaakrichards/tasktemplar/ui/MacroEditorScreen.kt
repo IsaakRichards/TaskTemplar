@@ -86,7 +86,13 @@ fun MacroEditorScreen(
 
     fun putStep(kind: StepKind, index: Int, step: Step) {
         val list = stepsFor(kind).toMutableList()
-        if (index in list.indices) list[index] = step else list.add(step)
+        if (index in list.indices) {
+            list[index] = step
+        } else {
+            list.add(step)
+            // New If / Loop blocks get their closing marker automatically.
+            if (kind == StepKind.ACTION) Catalog.blockPartner[step.type]?.let { list.add(Step(it)) }
+        }
         setSteps(kind, list)
     }
 
@@ -177,6 +183,7 @@ fun MacroEditorScreen(
                 onAdd = { picking = StepKind.ACTION },
                 onEdit = { editing = Editing(StepKind.ACTION, it, macro.actions[it]) },
                 onRemove = { i -> setSteps(StepKind.ACTION, macro.actions.filterIndexed { j, _ -> j != i }) },
+                indents = blockDepths(macro.actions),
                 onMove = { from, to ->
                     val list = macro.actions.toMutableList()
                     if (from in list.indices && to in list.indices) {
@@ -188,7 +195,7 @@ fun MacroEditorScreen(
             )
 
             Text(
-                "Tip: text fields accept magic text such as {time}, {date}, {battery}, {ssid}, and for notification triggers {app}, {title}, {text}.",
+                "Tip: text fields accept magic text such as {time}, {date}, {battery}, {ssid}, {v=globalVar}, {lv=localVar}, {loop_index}, and for notification triggers {app}, {title}, {text}.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -203,7 +210,7 @@ fun MacroEditorScreen(
             onPick = { spec ->
                 picking = null
                 val step = Step(spec.type, spec.defaults())
-                if (spec.params.isEmpty()) putStep(kind, -1, step) else editing = Editing(kind, -1, step)
+                if (spec.params.isEmpty() && !spec.conditions) putStep(kind, -1, step) else editing = Editing(kind, -1, step)
             },
         )
     }
@@ -249,6 +256,7 @@ private fun StepSection(
     onEdit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onMove: ((Int, Int) -> Unit)? = null,
+    indents: List<Int>? = null,
     header: @Composable () -> Unit = {},
 ) {
     Card(
@@ -274,20 +282,29 @@ private fun StepSection(
             }
             steps.forEachIndexed { i, step ->
                 val spec = Catalog.spec(step.type)
+                val isFlow = step.type in Catalog.flowTypes
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .clickable { onEdit(i) }
-                        .padding(vertical = 4.dp),
+                        .padding(start = (14 * (indents?.getOrNull(i) ?: 0)).dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(spec?.label ?: step.type, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            Catalog.summarize(step),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
+                        if (isFlow) {
+                            Text(
+                                Catalog.summarize(step),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        } else {
+                            Text(spec?.label ?: step.type, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                Catalog.summarize(step),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.secondary,
+                            )
+                        }
                     }
                     if (onMove != null) {
                         IconButton(onClick = { onMove(i, i - 1) }, enabled = i > 0) {
@@ -300,6 +317,22 @@ private fun StepSection(
                     IconButton(onClick = { onRemove(i) }) { Icon(Icons.Default.Close, "Remove") }
                 }
             }
+        }
+    }
+}
+
+/** Indentation level of each action, so If / Loop bodies read as blocks. */
+private fun blockDepths(actions: List<Step>): List<Int> {
+    var depth = 0
+    return actions.map { s ->
+        when (s.type) {
+            "if", "loop" -> depth.also { depth++ }
+            "else_if", "else" -> (depth - 1).coerceAtLeast(0)
+            "end_if", "end_loop" -> {
+                depth = (depth - 1).coerceAtLeast(0)
+                depth
+            }
+            else -> depth
         }
     }
 }

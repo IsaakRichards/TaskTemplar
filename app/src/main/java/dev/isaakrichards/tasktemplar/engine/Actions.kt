@@ -61,8 +61,7 @@ object Actions {
     }
 
     /** Replaces {name} placeholders with values from [vars]. */
-    fun magic(text: String, vars: Map<String, String>): String =
-        vars.entries.fold(text) { acc, (k, v) -> acc.replace("{$k}", v) }
+    fun magic(text: String, vars: Map<String, String>): String = MagicText.apply(text, vars)
 
     /** Runs one action. Returns a short note for the log, or throws with a readable message. */
     suspend fun execute(ctx: Context, step: Step, vars: MutableMap<String, String>): String? {

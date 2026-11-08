@@ -10,6 +10,9 @@ import java.time.LocalTime
 
 object Conditions {
 
+    /** Looks up whether a macro is enabled (null = no such macro); wired up at app start. */
+    var macroEnabled: (String) -> Boolean? = { null }
+
     /** Does trigger number [index] of [macro] match this [event]? */
     fun triggerMatches(macro: Macro, index: Int, step: Step, event: MacroEvent): Boolean {
         val d = event.data
@@ -42,6 +45,9 @@ object Conditions {
 
             "headphones" -> event.type == "headphones" && d["state"] == step.p("state", "plugged")
 
+            "variable_changed" -> event.type == "variable" &&
+                step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
+
             "notification" -> {
                 if (event.type != "notification") return false
                 val app = step.p("app")
@@ -54,13 +60,25 @@ object Conditions {
         }
     }
 
-    fun constraintsPass(ctx: Context, macro: Macro): Boolean {
-        if (macro.constraints.isEmpty()) return true
-        val results = macro.constraints.map { constraintPasses(ctx, it) }
-        return if (macro.constraintMode == Macro.MODE_ANY) results.any { it } else results.all { it }
+    fun constraintsPass(ctx: Context, macro: Macro): Boolean =
+        allPass(ctx, macro.constraints, macro.constraintMode)
+
+    /** Combines [conds] with "all" / "any" logic. An empty list passes. */
+    fun allPass(ctx: Context, conds: List<Step>, mode: String, vars: Map<String, String> = emptyMap()): Boolean {
+        if (conds.isEmpty()) return true
+        return if (mode == Macro.MODE_ANY) conds.any { constraintPasses(ctx, it, vars) }
+        else conds.all { constraintPasses(ctx, it, vars) }
     }
 
-    fun constraintPasses(ctx: Context, step: Step): Boolean = when (step.type) {
+    fun constraintPasses(ctx: Context, step: Step, vars: Map<String, String> = emptyMap()): Boolean = when (step.type) {
+        "variable" -> {
+            val name = MagicText.apply(step.p("name"), vars).trim()
+            val left = if (step.p("scope", "global") == "local") vars[name] ?: "" else MagicText.global(name)
+            VarTypes.compare(left, step.p("op", "eq"), MagicText.apply(step.params["value"] ?: "", vars))
+        }
+
+        "macro_enabled" -> macroEnabled(step.p("macro")) == (step.p("state", "enabled") == "enabled")
+
         "time_window" -> {
             val now = LocalTime.now()
             val from = parseTime(step.p("from", "22:00"))

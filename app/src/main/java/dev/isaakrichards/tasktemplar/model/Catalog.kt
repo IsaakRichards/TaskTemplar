@@ -6,7 +6,7 @@ enum class StepKind(val title: String) {
     ACTION("Action"),
 }
 
-enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP }
+enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO }
 
 data class ParamSpec(
     val key: String,
@@ -25,6 +25,8 @@ data class StepSpec(
     val label: String,
     val description: String,
     val params: List<ParamSpec> = emptyList(),
+    /** True for logic steps that hold a list of constraint conditions (If, Else If, Loop). */
+    val conditions: Boolean = false,
     val summary: (Step) -> String = { label },
 ) {
     fun defaults(): Map<String, String> = params.associate { it.key to it.default }
@@ -44,7 +46,7 @@ object Catalog {
 
     private val onOff = listOf("connected" to "Connected", "disconnected" to "Disconnected")
 
-    val triggers: List<StepSpec> = listOf(
+    private val baseTriggers: List<StepSpec> = listOf(
         StepSpec(
             "time", T, "Date & time", "Time of day", "Fires at a set time on chosen days.",
             listOf(
@@ -107,7 +109,15 @@ object Catalog {
         },
     )
 
-    val constraints: List<StepSpec> = listOf(
+    // ---- appended triggers ----
+    private val moreTriggers: List<StepSpec> = listOf(
+        StepSpec(
+            "variable_changed", T, "Variables", "Variable changed", "Fires when a global variable is set to a new value.",
+            listOf(ParamSpec("name", "Variable name", ParamKind.TEXT, optional = true, hint = "Any variable")),
+        ) { "Variable ${it.p("name", "(any)")} changed" },
+    )
+
+    private val baseConstraints: List<StepSpec> = listOf(
         StepSpec(
             "time_window", C, "Date & time", "Time window", "Only between two times (can cross midnight).",
             listOf(
@@ -143,7 +153,7 @@ object Catalog {
         ) { "Screen ${it.p("state", "on")}" },
     )
 
-    val actions: List<StepSpec> = listOf(
+    private val baseActions: List<StepSpec> = listOf(
         StepSpec(
             "notify", A, "Notify", "Show notification", "Posts a notification.",
             listOf(
@@ -219,6 +229,164 @@ object Catalog {
             listOf(ParamSpec("seconds", "Seconds", ParamKind.NUMBER, "5")),
         ) { "${it.p("seconds", "5")} s" },
     )
+
+    // ---- Stage 1: variables, logic and macro control ----
+
+    private val scopeChoice = ParamSpec(
+        "scope", "Scope", ParamKind.CHOICE, "global",
+        listOf("global" to "Global (shared by all macros)", "local" to "Local (this run only)"),
+    )
+
+    private val compareOps = listOf(
+        "eq" to "equals", "ne" to "does not equal",
+        "lt" to "less than", "le" to "less than or equal", "gt" to "greater than", "ge" to "greater than or equal",
+        "contains" to "contains", "not_contains" to "does not contain",
+        "empty" to "is empty", "not_empty" to "is not empty",
+        "is_true" to "is true", "is_false" to "is false",
+    )
+
+    private fun opLabel(op: String) = compareOps.firstOrNull { it.first == op }?.second ?: op
+
+    /** Turns a macro id into its name for summaries; replaced at app start with a real lookup. */
+    var macroName: (String) -> String = { it }
+
+    fun conditionSummary(step: Step): String =
+        if (step.conditions.isEmpty()) "(no conditions — always true)"
+        else step.conditions.joinToString(if (step.conditionMode == Macro.MODE_ANY) " or " else " and ") { summarize(it) }
+
+    private fun varRef(step: Step) =
+        (if (step.p("scope", "global") == "local") "local " else "") + step.p("name", "?")
+
+    private val logicConstraints: List<StepSpec> = listOf(
+        StepSpec(
+            "variable", C, "Variables", "Variable value", "Compares a variable with a value (numbers compare as numbers).",
+            listOf(
+                scopeChoice,
+                ParamSpec("name", "Variable name", ParamKind.TEXT),
+                ParamSpec("op", "Is", ParamKind.CHOICE, "eq", compareOps),
+                ParamSpec("value", "Value", ParamKind.TEXT, optional = true, hint = "Magic text allowed, e.g. {v=other}"),
+            ),
+        ) { s ->
+            val op = s.p("op", "eq")
+            val tail = if (op in setOf("empty", "not_empty", "is_true", "is_false")) "" else " ${s.p("value")}"
+            "${varRef(s)} ${opLabel(op)}$tail"
+        },
+        StepSpec(
+            "macro_enabled", C, "Macros", "Macro enabled / disabled", "Checks whether another macro is switched on.",
+            listOf(
+                ParamSpec("macro", "Macro", ParamKind.MACRO),
+                ParamSpec("state", "Macro is", ParamKind.CHOICE, "enabled", listOf("enabled" to "Enabled", "disabled" to "Disabled")),
+            ),
+        ) { "“${macroName(it.p("macro"))}” ${it.p("state", "enabled")}" },
+    )
+
+    private val logicActions: List<StepSpec> = listOf(
+        StepSpec("if", A, "Logic", "If", "Runs the following actions only when the conditions pass. Adds a matching End If.", conditions = true) {
+            "If ${conditionSummary(it)}"
+        },
+        StepSpec("else_if", A, "Logic", "Else If", "Checked when the If above (and earlier Else Ifs) did not pass.", conditions = true) {
+            "Else if ${conditionSummary(it)}"
+        },
+        StepSpec("else", A, "Logic", "Else", "Runs when no If / Else If above passed.") { "Else" },
+        StepSpec("end_if", A, "Logic", "End If", "Closes an If block.") { "End if" },
+        StepSpec(
+            "loop", A, "Logic", "Loop", "Repeats the actions up to End Loop. The current pass number is {loop_index}.",
+            listOf(
+                ParamSpec(
+                    "mode", "Repeat", ParamKind.CHOICE, "count",
+                    listOf("count" to "A number of times", "while" to "While conditions pass", "forever" to "Forever (until Break / Stop)"),
+                ),
+                ParamSpec("count", "Times (for “a number of times”)", ParamKind.TEXT, "3", hint = "Number or magic text"),
+            ),
+            conditions = true,
+        ) { s ->
+            when (s.p("mode", "count")) {
+                "while" -> "Loop while ${conditionSummary(s)}"
+                "forever" -> "Loop forever"
+                else -> "Loop ${s.p("count", "3")} times"
+            }
+        },
+        StepSpec("end_loop", A, "Logic", "End Loop", "Closes a Loop block.") { "End loop" },
+        StepSpec("break", A, "Logic", "Break", "Leaves the innermost loop.") { "Break out of loop" },
+        StepSpec("continue", A, "Logic", "Continue", "Skips to the next pass of the innermost loop.") { "Next loop pass" },
+        StepSpec("stop", A, "Logic", "Stop this macro", "Ends the macro here.") { "Stop" },
+
+        StepSpec(
+            "set_variable", A, "Variables", "Set variable", "Creates or changes a variable. Number values accept math like {v=count} * 2 + 1.",
+            listOf(
+                scopeChoice,
+                ParamSpec("name", "Variable name", ParamKind.TEXT),
+                ParamSpec(
+                    "type", "Type", ParamKind.CHOICE, "integer",
+                    listOf("integer" to "Integer", "decimal" to "Decimal", "boolean" to "True / false", "string" to "Text"),
+                ),
+                ParamSpec(
+                    "op", "Operation", ParamKind.CHOICE, "set",
+                    listOf("set" to "Set to value", "increment" to "Add value (default 1)", "decrement" to "Subtract value (default 1)", "toggle" to "Toggle true/false", "append" to "Append text"),
+                ),
+                ParamSpec("value", "Value", ParamKind.TEXT, optional = true, hint = "Magic text and math allowed"),
+            ),
+        ) { s ->
+            when (s.p("op", "set")) {
+                "increment" -> "${varRef(s)} += ${s.p("value", "1")}"
+                "decrement" -> "${varRef(s)} -= ${s.p("value", "1")}"
+                "toggle" -> "Toggle ${varRef(s)}"
+                "append" -> "${varRef(s)} += \"${s.p("value")}\""
+                else -> "${varRef(s)} = ${s.p("value")}"
+            }
+        },
+        StepSpec(
+            "text_op", A, "Variables", "Text manipulation", "Transforms text and saves the result into a variable.",
+            listOf(
+                ParamSpec(
+                    "op", "Operation", ParamKind.CHOICE, "upper",
+                    listOf(
+                        "upper" to "UPPERCASE", "lower" to "lowercase", "trim" to "Trim spaces", "length" to "Length",
+                        "replace" to "Replace A with B", "substring" to "Substring (start A, length B)",
+                        "regex" to "Regex extract (pattern A, group B)", "url_encode" to "URL-encode",
+                    ),
+                ),
+                ParamSpec("input", "Input text", ParamKind.TEXT, hint = "Magic text allowed"),
+                ParamSpec("a", "A", ParamKind.TEXT, optional = true),
+                ParamSpec("b", "B", ParamKind.TEXT, optional = true),
+                scopeChoice.copy(default = "local"),
+                ParamSpec("name", "Save into variable", ParamKind.TEXT, "result"),
+            ),
+        ) { "${it.p("op", "upper")} → ${varRef(it)}" },
+        StepSpec(
+            "log", A, "Variables", "Write to log", "Adds a line to the run log — handy for debugging.",
+            listOf(ParamSpec("text", "Text", ParamKind.TEXT, hint = "Magic text allowed")),
+        ) { "\"${it.p("text")}\"" },
+
+        StepSpec(
+            "run_macro", A, "Macros", "Run macro", "Starts another macro's actions.",
+            listOf(
+                ParamSpec("macro", "Macro", ParamKind.MACRO),
+                ParamSpec("check", "Constraints", ParamKind.CHOICE, "ignore", listOf("ignore" to "Ignore its constraints", "check" to "Only run if its constraints pass")),
+            ),
+        ) { "Run “${macroName(it.p("macro"))}”" },
+        StepSpec(
+            "macro_enable", A, "Macros", "Enable / disable macro", "Switches a macro on or off.",
+            listOf(
+                ParamSpec("macro", "Macro", ParamKind.MACRO),
+                ParamSpec("state", "Set to", ParamKind.CHOICE, "toggle", listOf("enable" to "Enabled", "disable" to "Disabled", "toggle" to "Toggle")),
+            ),
+        ) { "${it.p("state", "toggle").replaceFirstChar { c -> c.uppercase() }} “${macroName(it.p("macro"))}”" },
+        StepSpec(
+            "cancel_macro", A, "Macros", "Cancel macro actions", "Stops running copies of a macro (blank = other runs of this macro).",
+            listOf(ParamSpec("macro", "Macro", ParamKind.MACRO, optional = true, hint = "This macro")),
+        ) { s -> s.p("macro").let { if (it.isBlank()) "Cancel other runs of this macro" else "Cancel “${macroName(it)}”" } },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers
+    val constraints: List<StepSpec> = baseConstraints + logicConstraints
+    val actions: List<StepSpec> = baseActions + logicActions
+
+    /** Logic steps whose block needs a closing partner, added automatically. */
+    val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")
+
+    /** Steps run by the flow engine itself rather than [dev.isaakrichards.tasktemplar.engine.Actions]. */
+    val flowTypes = setOf("if", "else_if", "else", "end_if", "loop", "end_loop", "break", "continue", "stop")
 
     private val byType: Map<String, StepSpec> = (triggers + constraints + actions).associateBy { it.type }
 

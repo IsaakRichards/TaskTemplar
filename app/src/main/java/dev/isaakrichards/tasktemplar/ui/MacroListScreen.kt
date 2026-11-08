@@ -61,6 +61,7 @@ fun MacroListScreen(
     onNew: () -> Unit,
     onLog: () -> Unit,
     onPerms: () -> Unit,
+    onVars: () -> Unit,
 ) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
@@ -94,6 +95,10 @@ fun MacroListScreen(
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Global variables") }, onClick = {
+                                menu = false
+                                onVars()
+                            })
                             DropdownMenuItem(text = { Text("Export macros") }, onClick = {
                                 menu = false
                                 exporter.launch("tasktemplar-backup.json")

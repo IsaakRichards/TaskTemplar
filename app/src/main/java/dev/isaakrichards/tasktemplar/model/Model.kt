@@ -4,8 +4,17 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-/** One trigger, constraint or action: a type id from [Catalog] plus its settings. */
-data class Step(val type: String, val params: Map<String, String> = emptyMap()) {
+/**
+ * One trigger, constraint or action: a type id from [Catalog] plus its settings.
+ * Logic actions (If, Else If, Loop-while) also carry a list of [conditions], which are
+ * constraint steps combined with [conditionMode] ("all" or "any").
+ */
+data class Step(
+    val type: String,
+    val params: Map<String, String> = emptyMap(),
+    val conditions: List<Step> = emptyList(),
+    val conditionMode: String = Macro.MODE_ALL,
+) {
 
     /** Returns the param, or [default] when it is missing or blank. */
     fun p(key: String, default: String = ""): String =
@@ -14,6 +23,10 @@ data class Step(val type: String, val params: Map<String, String> = emptyMap()) 
     fun toJson(): JSONObject = JSONObject().apply {
         put("type", type)
         put("params", JSONObject().apply { params.forEach { (k, v) -> put(k, v) } })
+        if (conditions.isNotEmpty()) {
+            put("conditions", JSONArray().apply { conditions.forEach { put(it.toJson()) } })
+            put("conditionMode", conditionMode)
+        }
     }
 
     companion object {
@@ -21,7 +34,10 @@ data class Step(val type: String, val params: Map<String, String> = emptyMap()) 
             val p = o.optJSONObject("params") ?: JSONObject()
             val map = mutableMapOf<String, String>()
             p.keys().forEach { k -> map[k] = p.optString(k) }
-            return Step(o.getString("type"), map)
+            val arr = o.optJSONArray("conditions")
+            val conds = if (arr == null) emptyList() else
+                (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { fromJson(it) } }
+            return Step(o.getString("type"), map, conds, o.optString("conditionMode", Macro.MODE_ALL))
         }
     }
 }

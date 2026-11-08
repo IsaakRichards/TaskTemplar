@@ -31,9 +31,15 @@ Macros live in a JSON file on the phone and can be exported or imported from the
 | | | HTTP GET/POST (webhooks, home server) |
 | | | Wait |
 
+**Logic (v0.2)**: If / Else If / Else / End If, Loop (N times, while, forever) with Break / Continue,
+Stop, global and local variables (integer, decimal, true/false, text) with math expressions,
+text manipulation, run / enable / cancel other macros, a "Variable changed" trigger and
+"Variable value" / "Macro enabled" constraints. Global variables have their own screen (⋮ menu).
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
-HTTP action, later actions can use `{http_code}` and `{http_body}`.
+HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),
+`{lv=name}` (local), `{loop_index}` inside loops.
 
 Every macro has a ▶ button for a test run, and the run log (☰ icon) shows what fired and what failed.
 

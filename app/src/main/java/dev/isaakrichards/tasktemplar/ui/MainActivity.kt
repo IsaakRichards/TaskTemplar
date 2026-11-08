@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
 private const val HOME = "home"
 private const val LOG = "log"
 private const val PERMS = "perms"
+private const val VARS = "vars"
 private const val NEW = "edit:"
 
 @Composable
@@ -55,6 +56,7 @@ private fun AppRoot() {
     when {
         screen == LOG -> LogScreen(onBack = { screen = HOME })
         screen == PERMS -> PermissionsScreen(onBack = { screen = HOME })
+        screen == VARS -> VariablesScreen(onBack = { screen = HOME })
         screen.startsWith(NEW) -> {
             val id = screen.removePrefix(NEW).ifBlank { null }
             val initial = remember(screen) { id?.let { MacroStore.get(it) } ?: Macro() }
@@ -72,6 +74,7 @@ private fun AppRoot() {
             onNew = { screen = NEW },
             onLog = { screen = LOG },
             onPerms = { screen = PERMS },
+            onVars = { screen = VARS },
         )
     }
 }

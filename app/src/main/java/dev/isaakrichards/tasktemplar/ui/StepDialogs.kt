@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package dev.isaakrichards.tasktemplar.ui
 
 import android.app.TimePickerDialog
@@ -18,6 +20,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.collectAsState
+import dev.isaakrichards.tasktemplar.data.MacroStore
+import dev.isaakrichards.tasktemplar.model.Macro
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -97,6 +109,12 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
         }
     }
     var appPickerFor by remember { mutableStateOf<String?>(null) }
+    var macroPickerFor by remember { mutableStateOf<String?>(null) }
+    var conds by remember(step) { mutableStateOf(step.conditions) }
+    var condMode by remember(step) { mutableStateOf(step.conditionMode) }
+    var pickingCond by remember { mutableStateOf(false) }
+    var editingCond by remember { mutableStateOf<Pair<Int, Step>?>(null) }
+    val showConds = spec.conditions && (spec.type != "loop" || values["mode"] == "while")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -113,13 +131,66 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
                         value = values[ps.key] ?: "",
                         onChange = { values[ps.key] = it },
                         onPickApp = { appPickerFor = ps.key },
+                        onPickMacro = { macroPickerFor = ps.key },
+                    )
+                }
+                if (showConds) {
+                    ConditionsEditor(
+                        conds = conds,
+                        mode = condMode,
+                        onMode = { condMode = it },
+                        onAdd = { pickingCond = true },
+                        onEdit = { i -> editingCond = i to conds[i] },
+                        onRemove = { i -> conds = conds.filterIndexed { j, _ -> j != i } },
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(Step(spec.type, values.toMap())) }) { Text("Save") } },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(Step(spec.type, values.toMap(), if (spec.conditions) conds else emptyList(), condMode))
+            }) { Text("Save") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+
+    if (pickingCond) {
+        TypePickerDialog(
+            kind = StepKind.CONSTRAINT,
+            onDismiss = { pickingCond = false },
+            onPick = { cs ->
+                pickingCond = false
+                val ns = Step(cs.type, cs.defaults())
+                if (cs.params.isEmpty()) conds = conds + ns else editingCond = -1 to ns
+            },
+        )
+    }
+
+    editingCond?.let { (i, cs) ->
+        val cspec = Catalog.spec(cs.type)
+        if (cspec != null) {
+            StepEditDialog(
+                spec = cspec,
+                step = cs,
+                onDismiss = { editingCond = null },
+                onSave = { ns ->
+                    conds = if (i in conds.indices) conds.toMutableList().also { it[i] = ns } else conds + ns
+                    editingCond = null
+                },
+            )
+        }
+    }
+
+    macroPickerFor?.let { key ->
+        MacroPickerDialog(
+            allowNone = spec.params.firstOrNull { it.key == key }?.optional == true,
+            onPick = { id ->
+                values[key] = id
+                macroPickerFor = null
+            },
+            onDismiss = { macroPickerFor = null },
+        )
+    }
 
     appPickerFor?.let { key ->
         AppPickerDialog(
@@ -133,7 +204,13 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
 }
 
 @Composable
-private fun ParamField(spec: ParamSpec, value: String, onChange: (String) -> Unit, onPickApp: () -> Unit) {
+private fun ParamField(
+    spec: ParamSpec,
+    value: String,
+    onChange: (String) -> Unit,
+    onPickApp: () -> Unit,
+    onPickMacro: () -> Unit,
+) {
     val ctx = LocalContext.current
     val label = spec.label + if (spec.optional) " (optional)" else ""
     when (spec.kind) {
@@ -198,6 +275,11 @@ private fun ParamField(spec: ParamSpec, value: String, onChange: (String) -> Uni
                     Text(text)
                 }
             }
+        }
+
+        ParamKind.MACRO -> OutlinedButton(onClick = onPickMacro, modifier = Modifier.fillMaxWidth()) {
+            val name = if (value.isBlank()) (spec.hint.ifBlank { "Choose…" }) else Catalog.macroName(value)
+            Text("$label: $name")
         }
 
         ParamKind.APP -> Row(verticalAlignment = Alignment.CenterVertically) {
@@ -269,6 +351,73 @@ fun AppPickerDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                             }
                         }
                     }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun ConditionsEditor(
+    conds: List<Step>,
+    mode: String,
+    onMode: (String) -> Unit,
+    onAdd: () -> Unit,
+    onEdit: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Conditions", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        if (conds.size > 1) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = mode == Macro.MODE_ALL, onClick = { onMode(Macro.MODE_ALL) }, label = { Text("All") })
+                FilterChip(selected = mode == Macro.MODE_ANY, onClick = { onMode(Macro.MODE_ANY) }, label = { Text("Any") })
+            }
+        }
+        if (conds.isEmpty()) {
+            Text("None yet: always true", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+        }
+        conds.forEachIndexed { i, c ->
+            Row(Modifier.fillMaxWidth().clickable { onEdit(i) }, verticalAlignment = Alignment.CenterVertically) {
+                Text(Catalog.summarize(c), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = { onRemove(i) }) { Icon(Icons.Default.Close, "Remove condition") }
+            }
+        }
+        TextButton(onClick = onAdd) {
+            Icon(Icons.Default.Add, null)
+            Text(" Add condition")
+        }
+    }
+}
+
+@Composable
+fun MacroPickerDialog(allowNone: Boolean, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val macros by MacroStore.macros.collectAsState()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose macro") },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (allowNone) {
+                    item {
+                        Text(
+                            "This macro",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.fillMaxWidth().clickable { onPick("") }.padding(vertical = 10.dp),
+                        )
+                    }
+                }
+                if (macros.isEmpty()) {
+                    item { Text("No saved macros yet. Save this one first, then come back.") }
+                }
+                items(macros, key = { it.id }) { m ->
+                    Text(
+                        m.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.fillMaxWidth().clickable { onPick(m.id) }.padding(vertical = 10.dp),
+                    )
                 }
             }
         },

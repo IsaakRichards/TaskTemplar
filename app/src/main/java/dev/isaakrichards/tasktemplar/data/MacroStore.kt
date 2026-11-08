@@ -28,6 +28,7 @@ object MacroStore {
     fun init(context: Context) {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
+        GlobalVars.init(appContext)
         macroFile = File(appContext.filesDir, "macros.json")
         logFile = File(appContext.filesDir, "log.json")
         _macros.value = readArray(macroFile).mapNotNull { runCatching { Macro.fromJson(it) }.getOrNull() }
