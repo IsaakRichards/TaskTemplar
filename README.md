@@ -45,9 +45,9 @@ Every macro has a ▶ button for a test run, and the run log (☰ icon) shows wh
 
 ## Getting the APK
 
-Push this repo to GitHub. The workflow in `.github/workflows/build.yml` builds the APK on every
-push to `main`. Download it from the run's **Artifacts**. Push a tag like `v0.1.0` and it also
-attaches the APK to a GitHub Release.
+Grab the APK from the repo's **Releases** page. A new release is published automatically every time the
+app's `versionName` goes up on `main`; every other push still builds an APK you can download from the
+workflow run's **Artifacts**.
 
 Or open the folder in Android Studio and hit Run.
 
