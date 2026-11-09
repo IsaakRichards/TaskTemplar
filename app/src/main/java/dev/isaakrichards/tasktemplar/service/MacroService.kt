@@ -43,6 +43,20 @@ class MacroService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var lastBattery = -1
+    private var lastTemp = Double.NaN
+    private var lastRinger: String? = null
+    private var lastGps: Boolean? = null
+    private var musicOn: Boolean? = null
+    private lateinit var sensors: SensorWatch
+
+    private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
+        override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
+            val now = getSystemService(AudioManager::class.java).isMusicActive
+            val prev = musicOn
+            musicOn = now
+            if (prev != null && prev != now) emit(MacroEvent("music", mapOf("state" to if (now) "playing" else "stopped")))
+        }
+    }
     private var wifiUp: Boolean? = null
     private var netRegisteredAt = 0L
 
@@ -58,6 +72,14 @@ class MacroService : Service() {
                         emit(MacroEvent("battery", mapOf("level" to pct.toString(), "prev" to lastBattery.toString())))
                     }
                     lastBattery = pct
+                    val temp = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+                    if (temp != Int.MIN_VALUE) {
+                        val c = temp / 10.0
+                        if (!lastTemp.isNaN() && c != lastTemp) {
+                            emit(MacroEvent("battery_temp", mapOf("temp" to c.toString(), "prev" to lastTemp.toString())))
+                        }
+                        lastTemp = c
+                    }
                 }
                 Intent.ACTION_POWER_CONNECTED -> emit(MacroEvent("power", mapOf("state" to "connected")))
                 Intent.ACTION_POWER_DISCONNECTED -> emit(MacroEvent("power", mapOf("state" to "disconnected")))
@@ -69,6 +91,27 @@ class MacroService : Service() {
                     val plugged = intent.getIntExtra("state", 0) == 1
                     emit(MacroEvent("headphones", mapOf("state" to if (plugged) "plugged" else "unplugged")))
                 }
+                AudioManager.RINGER_MODE_CHANGED_ACTION -> {
+                    val mode = DeviceState.ringerMode(context)
+                    if (lastRinger != null && mode != lastRinger) emit(MacroEvent("silent_mode", mapOf("state" to mode)))
+                    lastRinger = mode
+                }
+                Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
+                    val on = intent.getBooleanExtra("state", DeviceState.flag(context, "airplane"))
+                    emit(MacroEvent("airplane_changed", mapOf("state" to if (on) "on" else "off")))
+                }
+                android.location.LocationManager.PROVIDERS_CHANGED_ACTION -> {
+                    val on = DeviceState.flag(context, "gps")
+                    if (lastGps != null && on != lastGps) emit(MacroEvent("gps_changed", mapOf("state" to if (on) "on" else "off")))
+                    lastGps = on
+                }
+                Intent.ACTION_DOCK_EVENT -> {
+                    if (isInitialStickyBroadcast) return
+                    val docked = intent.getIntExtra(Intent.EXTRA_DOCK_STATE, Intent.EXTRA_DOCK_STATE_UNDOCKED) != Intent.EXTRA_DOCK_STATE_UNDOCKED
+                    emit(MacroEvent("dock", mapOf("state" to if (docked) "docked" else "undocked")))
+                }
+                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED -> emit(MacroEvent("usb_device", mapOf("state" to "attached")))
+                android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED -> emit(MacroEvent("usb_device", mapOf("state" to "detached")))
                 BluetoothDevice.ACTION_ACL_CONNECTED, BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
                     val state = if (intent.action == BluetoothDevice.ACTION_ACL_CONNECTED) "connected" else "disconnected"
                     emit(MacroEvent("bluetooth", mapOf("state" to state, "device" to deviceName(intent))))
@@ -143,7 +186,15 @@ class MacroService : Service() {
             addAction(AudioManager.ACTION_HEADSET_PLUG)
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
+            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+            addAction(android.location.LocationManager.PROVIDERS_CHANGED_ACTION)
+            addAction(Intent.ACTION_DOCK_EVENT)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
         }
+        lastRinger = DeviceState.ringerMode(this)
+        lastGps = DeviceState.flag(this, "gps")
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
         val pkgFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -163,10 +214,27 @@ class MacroService : Service() {
             cm.registerNetworkCallback(req, netCallback)
         }
 
+        runCatching {
+            val am = getSystemService(AudioManager::class.java)
+            musicOn = am.isMusicActive
+            am.registerAudioPlaybackCallback(playbackCallback, handler)
+        }
+        sensors = SensorWatch(this) { emit(it) }
+        refreshSensors()
+
         AlarmScheduler.rescheduleAll(this)
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    /** Turns sensors on/off depending on which triggers enabled macros use. */
+    private fun refreshSensors() {
+        val needs = MacroStore.macros.value.filter { it.enabled }.flatMap { m -> m.triggers.map { it.type } }.toSet()
+        sensors.update(needs)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_REFRESH && ::sensors.isInitialized) refreshSensors()
+        return START_STICKY
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -174,6 +242,8 @@ class MacroService : Service() {
         runCatching { unregisterReceiver(receiver) }
         runCatching { unregisterReceiver(packageReceiver) }
         runCatching { unregisterReceiver(phoneReceiver) }
+        runCatching { getSystemService(AudioManager::class.java).unregisterAudioPlaybackCallback(playbackCallback) }
+        if (::sensors.isInitialized) sensors.stop()
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -227,6 +297,12 @@ class MacroService : Service() {
 
     companion object {
         private const val NOTIFICATION_ID = 1
+        const val ACTION_REFRESH = "dev.isaakrichards.tasktemplar.REFRESH"
+
+        /** Tells a running service that macros changed (sensor needs may differ). */
+        fun refresh(ctx: Context) {
+            runCatching { ctx.startService(Intent(ctx, MacroService::class.java).setAction(ACTION_REFRESH)) }
+        }
 
         fun start(ctx: Context) {
             runCatching {

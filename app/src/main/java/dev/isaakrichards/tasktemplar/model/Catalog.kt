@@ -599,9 +599,164 @@ object Catalog {
         ) { "Get location" },
     )
 
-    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers
-    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints
-    val actions: List<StepSpec> = baseActions + screenActions + phoneActions + logicActions
+    // ---- Stage 4: sensors, device state, toggles, media ----
+
+    /** Triggers that just compare the event's "state" with the chosen one (value = default state). */
+    val simpleStateTriggers: Map<String, String> = mapOf(
+        "flip" to "face_down", "proximity" to "near", "orientation" to "landscape", "music" to "playing",
+        "silent_mode" to "silent", "airplane_changed" to "on", "gps_changed" to "on", "dock" to "docked",
+        "usb_device" to "attached", "volume_button" to "up",
+    )
+
+    private fun stateTrigger(type: String, cat: String, label: String, desc: String, vararg states: Pair<String, String>) =
+        StepSpec(type, T, cat, label, desc, listOf(ParamSpec("state", "When", ParamKind.CHOICE, states.first().first, states.toList()))) { s ->
+            "$label: " + (states.firstOrNull { it.first == s.p("state", states.first().first) }?.second ?: "")
+        }
+
+    private val onOffStates = arrayOf("on" to "Turned on", "off" to "Turned off")
+
+    private val deviceTriggers: List<StepSpec> = listOf(
+        StepSpec(
+            "shake", T, "Sensors", "Shake device", "Fires when you shake the phone.",
+            listOf(ParamSpec("sensitivity", "Sensitivity", ParamKind.CHOICE, "medium", listOf("low" to "Low (hard shake)", "medium" to "Medium", "high" to "High (gentle shake)"))),
+        ) { "Shake (${it.p("sensitivity", "medium")})" },
+        stateTrigger("flip", "Sensors", "Flip device", "Fires when the phone is turned face down or face up.", "face_down" to "Face down", "face_up" to "Face up"),
+        stateTrigger("proximity", "Sensors", "Proximity sensor", "Fires when something covers or uncovers the top of the screen.", "near" to "Near (covered)", "far" to "Far (uncovered)"),
+        stateTrigger("orientation", "Sensors", "Orientation", "Fires when the phone turns to landscape or portrait.", "landscape" to "Landscape", "portrait" to "Portrait"),
+        stateTrigger("music", "Volume & sound", "Music playing", "Fires when any app starts or stops playing audio.", "playing" to "Started playing", "stopped" to "Stopped playing"),
+        stateTrigger("silent_mode", "Volume & sound", "Ringer mode changed", "Fires when the phone switches ringer mode.", "silent" to "Silent", "vibrate" to "Vibrate", "normal" to "Normal"),
+        stateTrigger("volume_button", "Volume & sound", "Volume button pressed", "Fires on volume key presses (screen on). Needs Accessibility.", "up" to "Volume up", "down" to "Volume down"),
+        stateTrigger("airplane_changed", "Connectivity", "Airplane mode changed", "Fires when airplane mode is switched.", *onOffStates),
+        stateTrigger("gps_changed", "Location", "Location services changed", "Fires when location (GPS) is switched on or off.", *onOffStates),
+        stateTrigger("dock", "Device", "Dock / car mode", "Fires when docked or undocked (desk or car dock).", "docked" to "Docked", "undocked" to "Undocked"),
+        stateTrigger("usb_device", "Connectivity", "USB device", "Fires when a USB device (keyboard, drive, DAC…) is attached or removed.", "attached" to "Attached", "detached" to "Removed"),
+        StepSpec(
+            "battery_temp", T, "Battery & power", "Battery temperature", "Fires when battery temperature crosses a threshold (°C).",
+            listOf(
+                ParamSpec("direction", "Fire when it", ParamKind.CHOICE, "above", listOf("above" to "Rises to or above", "below" to "Drops to or below")),
+                ParamSpec("temp", "Temperature (°C)", ParamKind.NUMBER, "40"),
+            ),
+        ) { "Battery temp ${it.p("direction", "above")} ${it.p("temp", "40")}°C" },
+    )
+
+    private fun stateConstraint(key: String, cat: String, label: String, on: String, off: String) =
+        StepSpec(
+            "state_$key", C, cat, label, "Checks whether: $label.",
+            listOf(ParamSpec("state", "State", ParamKind.CHOICE, "on", listOf("on" to on, "off" to off))),
+        ) { s -> if (s.p("state", "on") == "on") on else off }
+
+    private val deviceConstraints: List<StepSpec> = listOf(
+        stateConstraint("headphones", "Connectivity", "Headphones connected", "Headphones connected", "No headphones"),
+        stateConstraint("bluetooth", "Connectivity", "Bluetooth on", "Bluetooth on", "Bluetooth off"),
+        stateConstraint("wifi", "Connectivity", "Wi-Fi on", "Wi-Fi switched on", "Wi-Fi switched off"),
+        stateConstraint("airplane", "Connectivity", "Airplane mode", "Airplane mode on", "Airplane mode off"),
+        stateConstraint("mobile_data", "Connectivity", "Mobile data", "Mobile data on", "Mobile data off"),
+        stateConstraint("roaming", "Connectivity", "Roaming", "Roaming", "Not roaming"),
+        stateConstraint("gps", "Location", "Location services", "Location on", "Location off"),
+        stateConstraint("auto_rotate", "Device", "Auto-rotate", "Auto-rotate on", "Auto-rotate off"),
+        stateConstraint("locked", "Device", "Device locked", "Device locked", "Device unlocked"),
+        stateConstraint("landscape", "Device", "Orientation", "Landscape", "Portrait"),
+        stateConstraint("docked", "Device", "Docked", "Docked", "Not docked"),
+        stateConstraint("power_save", "Battery & power", "Battery saver", "Battery saver on", "Battery saver off"),
+        stateConstraint("music", "Volume & sound", "Music playing", "Audio playing", "Nothing playing"),
+        stateConstraint("dnd", "Volume & sound", "Do Not Disturb", "DND on", "DND off"),
+        StepSpec(
+            "ringer_state", C, "Volume & sound", "Ringer mode", "Only in a given ringer mode.",
+            listOf(ParamSpec("state", "Ringer is", ParamKind.CHOICE, "normal", listOf("normal" to "Normal", "vibrate" to "Vibrate", "silent" to "Silent"))),
+        ) { "Ringer ${it.p("state", "normal")}" },
+        StepSpec(
+            "battery_temp_state", C, "Battery & power", "Battery temperature", "Only when battery is above/below a temperature.",
+            listOf(
+                ParamSpec("direction", "Battery is", ParamKind.CHOICE, "above", listOf("above" to "Hotter than", "below" to "Cooler than")),
+                ParamSpec("temp", "Temperature (°C)", ParamKind.NUMBER, "40"),
+            ),
+        ) { "Battery ${it.p("direction", "above")} ${it.p("temp", "40")}°C" },
+    )
+
+    private val toggleStates = listOf("on" to "On", "off" to "Off", "toggle" to "Toggle")
+
+    private fun toggleAction(type: String, cat: String, label: String, desc: String) =
+        StepSpec(type, A, cat, label, desc, listOf(ParamSpec("state", "Set to", ParamKind.CHOICE, "toggle", toggleStates))) {
+            "$label ${it.p("state", "toggle")}"
+        }
+
+    private val deviceActions: List<StepSpec> = listOf(
+        toggleAction("wifi_set", "Connectivity", "Wi-Fi", "Switches Wi-Fi. Android 10+ needs root, otherwise it opens the Wi-Fi panel."),
+        toggleAction("bluetooth_set", "Connectivity", "Bluetooth", "Switches Bluetooth. Android 13+ needs root, otherwise it opens settings."),
+        toggleAction("mobile_data_set", "Connectivity", "Mobile data", "Switches mobile data. Needs root."),
+        toggleAction("airplane_set", "Connectivity", "Airplane mode", "Switches airplane mode. Needs root."),
+        toggleAction("auto_rotate", "Device", "Auto-rotate", "Switches screen auto-rotation. Needs Modify system settings."),
+        toggleAction("car_mode", "Device", "Car mode", "Switches Android's car mode."),
+        StepSpec(
+            "keep_awake", A, "Device", "Keep screen awake", "Stops the screen turning off (optionally for N minutes).",
+            listOf(
+                ParamSpec("state", "Set to", ParamKind.CHOICE, "on", toggleStates),
+                ParamSpec("minutes", "For minutes (0 = until turned off)", ParamKind.NUMBER, "0"),
+            ),
+        ) { "Keep awake ${it.p("state", "on")}" },
+        StepSpec("screen_on", A, "Device", "Turn screen on", "Wakes the screen.") { "Screen on" },
+        StepSpec(
+            "screen_timeout", A, "Device", "Screen timeout", "Sets how long before the screen turns off. Needs Modify system settings.",
+            listOf(ParamSpec("seconds", "Seconds", ParamKind.NUMBER, "60")),
+        ) { "Timeout ${it.p("seconds", "60")}s" },
+        StepSpec(
+            "set_wallpaper", A, "Device", "Set wallpaper", "Sets the wallpaper from an image file path or URL.",
+            listOf(
+                ParamSpec("source", "Image path or URL", ParamKind.TEXT, hint = "/sdcard/Pictures/bg.jpg or https://…"),
+                ParamSpec("target", "Apply to", ParamKind.CHOICE, "both", listOf("home" to "Home screen", "lock" to "Lock screen", "both" to "Both")),
+            ),
+        ) { "Wallpaper (${it.p("target", "both")})" },
+        StepSpec(
+            "set_alarm", A, "Date & time", "Set alarm clock", "Adds an alarm to your clock app.",
+            listOf(
+                ParamSpec("time", "Time", ParamKind.TIME, "07:00"),
+                ParamSpec("label", "Label", ParamKind.TEXT, "TaskTemplar"),
+            ),
+        ) { "Alarm at ${it.p("time", "07:00")}" },
+        StepSpec(
+            "media_control", A, "Media", "Media control", "Sends play / pause / next / previous to the active player.",
+            listOf(
+                ParamSpec(
+                    "button", "Button", ParamKind.CHOICE, "play_pause",
+                    listOf("play_pause" to "Play / pause", "play" to "Play", "pause" to "Pause", "next" to "Next", "previous" to "Previous", "stop" to "Stop"),
+                ),
+            ),
+        ) { "Media ${it.p("button", "play_pause").replace('_', '/')}" },
+        StepSpec(
+            "volume_step", A, "Volume & sound", "Volume up / down", "Nudges a volume stream one step.",
+            listOf(
+                ParamSpec("direction", "Direction", ParamKind.CHOICE, "up", listOf("up" to "Up", "down" to "Down")),
+                ParamSpec("stream", "Stream", ParamKind.CHOICE, "media", listOf("media" to "Media", "ring" to "Ringtone", "notification" to "Notification", "alarm" to "Alarm")),
+                ParamSpec("show", "Show volume bar", ParamKind.CHOICE, "yes", listOf("yes" to "Yes", "no" to "No")),
+            ),
+        ) { "${it.p("stream", "media")} volume ${it.p("direction", "up")}" },
+        StepSpec(
+            "play_sound", A, "Volume & sound", "Play sound", "Plays the default notification / ringtone / alarm sound, or a file or URL.",
+            listOf(
+                ParamSpec(
+                    "source", "Sound", ParamKind.CHOICE, "notification",
+                    listOf("notification" to "Default notification", "ringtone" to "Default ringtone", "alarm" to "Default alarm", "file" to "File path or URL"),
+                ),
+                ParamSpec("path", "File path or URL", ParamKind.TEXT, optional = true),
+                ParamSpec("stream", "Play as", ParamKind.CHOICE, "notification", listOf("notification" to "Notification", "media" to "Media", "alarm" to "Alarm (ignores silent)")),
+                ParamSpec("loop", "Loop", ParamKind.CHOICE, "no", listOf("no" to "Once", "yes" to "Loop until Stop sound")),
+            ),
+        ) { "Play ${it.p("source", "notification")}" },
+        StepSpec("stop_sound", A, "Volume & sound", "Stop sound", "Stops a sound started by Play sound.") { "Stop sound" },
+        StepSpec(
+            "shell", A, "Advanced", "Shell command", "Runs a shell command (as root if you choose). Output goes to {shell_output}, exit code to {shell_exit}.",
+            listOf(
+                ParamSpec("command", "Command", ParamKind.TEXT, hint = "Magic text allowed"),
+                ParamSpec("root", "Run as root", ParamKind.CHOICE, "no", listOf("no" to "No", "yes" to "Yes (rooted phones)")),
+                ParamSpec("timeout", "Timeout (seconds)", ParamKind.NUMBER, "30"),
+                ParamSpec("name", "Also save output to global variable", ParamKind.TEXT, optional = true),
+            ),
+        ) { (if (it.p("root", "no") == "yes") "# " else "$ ") + it.p("command") },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers
+    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints
+    val actions: List<StepSpec> = baseActions + screenActions + phoneActions + deviceActions + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

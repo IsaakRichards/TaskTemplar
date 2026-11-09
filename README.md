@@ -49,6 +49,14 @@ Android's own LocationManager, so they work on de-Googled phones. Constraints: c
 inside/outside a place, day of month, month. Actions: make / answer / end call, speakerphone, send SMS,
 compose email, open call log, and get location (`{lat}`, `{lng}`, `{location_url}`).
 
+**Sensors & device control (v0.5)**: shake, flip, proximity, orientation, music playing,
+ringer mode changed, volume buttons, airplane / location services changed, dock, USB device and
+battery temperature triggers (sensors only run while a macro needs them). About 16 new
+device-state constraints. Actions: Wi-Fi / Bluetooth / mobile data / airplane toggles (with root on
+newer Android, otherwise they open the right settings panel), auto-rotate, screen timeout, keep
+awake, screen on, media keys, volume up/down, play / stop sound, set alarm clock, car mode,
+wallpaper, and a shell-command action with optional root.
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

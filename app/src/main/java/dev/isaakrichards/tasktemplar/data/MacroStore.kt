@@ -84,6 +84,7 @@ object MacroStore {
         _macros.value = list
         writeArray(macroFile, JSONArray().apply { list.forEach { put(it.toJson()) } })
         AlarmScheduler.rescheduleAll(appContext)
+        dev.isaakrichards.tasktemplar.service.MacroService.refresh(appContext)
     }
 
     private fun readArray(file: File): List<org.json.JSONObject> {

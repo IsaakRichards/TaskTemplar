@@ -175,6 +175,11 @@ object MacroEngine {
             "make_call", "answer_call", "end_call", "speakerphone", "send_sms", "send_email", "open_call_log", "get_location" ->
                 PhoneActions.execute(ctx, step, vars)
 
+            "shell", "wifi_set", "bluetooth_set", "mobile_data_set", "airplane_set", "auto_rotate", "screen_timeout",
+            "keep_awake", "screen_on", "media_control", "volume_step", "play_sound", "stop_sound", "set_alarm",
+            "car_mode", "set_wallpaper" ->
+                DeviceActions.execute(ctx, step, vars)
+
             else -> Actions.execute(ctx, step, vars)
         }
     }

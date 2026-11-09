@@ -82,6 +82,24 @@ object Conditions {
             "geofence" -> event.type == "geofence" && d["macro"] == macro.id &&
                 d["idx"] == index.toString() && d["state"] == step.p("state", "enter")
 
+            "shake" -> event.type == "shake" &&
+                (d["force"]?.toDoubleOrNull() ?: 0.0) >= when (step.p("sensitivity", "medium")) {
+                    "low" -> 3.0
+                    "high" -> 2.0
+                    else -> 2.5
+                }
+
+            "battery_temp" -> {
+                if (event.type != "battery_temp") return false
+                val temp = d["temp"]?.toDoubleOrNull() ?: return false
+                val prev = d["prev"]?.toDoubleOrNull() ?: return false
+                val n = step.p("temp", "40").toDoubleOrNull() ?: 40.0
+                if (step.p("direction", "above") == "above") prev < n && temp >= n else prev > n && temp <= n
+            }
+
+            in Catalog.simpleStateTriggers -> event.type == step.type &&
+                d["state"] == step.p("state", Catalog.simpleStateTriggers.getValue(step.type))
+
             "variable_changed" -> event.type == "variable" &&
                 step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
 
@@ -133,6 +151,14 @@ object Conditions {
 
         "month" -> today().monthValue in numberList(step.p("months"))
 
+        "ringer_state" -> DeviceState.ringerMode(ctx) == step.p("state", "normal")
+
+        "battery_temp_state" -> {
+            val temp = DeviceState.batteryTemp(ctx)
+            val n = step.p("temp", "40").toDoubleOrNull() ?: 40.0
+            temp != null && (if (step.p("direction", "above") == "above") temp > n else temp < n)
+        }
+
         "app_foreground" -> {
             val inFront = step.p("app").isNotBlank() && foregroundApp() == step.p("app")
             inFront == (step.p("state", "foreground") == "foreground")
@@ -177,7 +203,11 @@ object Conditions {
 
         "screen_state" -> DeviceState.isScreenOn(ctx) == (step.p("state", "on") == "on")
 
-        else -> true
+        else -> if (step.type.startsWith("state_")) {
+            DeviceState.flag(ctx, step.type.removePrefix("state_")) == (step.p("state", "on") == "on")
+        } else {
+            true
+        }
     }
 
     /** Matches phone numbers loosely: digits only, and the shorter must end the longer. */

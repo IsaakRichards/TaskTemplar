@@ -43,6 +43,18 @@ class TemplarAccessibility : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    override fun onKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            val state = when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_VOLUME_UP -> "up"
+                android.view.KeyEvent.KEYCODE_VOLUME_DOWN -> "down"
+                else -> null
+            }
+            if (state != null) MacroEngine.dispatch(this, MacroEvent("volume_button", mapOf("state" to state)))
+        }
+        return false // never swallow the key
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         when (event.eventType) {
