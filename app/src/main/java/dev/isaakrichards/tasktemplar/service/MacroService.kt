@@ -76,6 +76,20 @@ class MacroService : Service() {
         }
     }
 
+    private val packageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = intent.data?.schemeSpecificPart ?: return
+            val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            val state = when (intent.action) {
+                Intent.ACTION_PACKAGE_ADDED -> if (replacing) return else "installed"
+                Intent.ACTION_PACKAGE_REPLACED -> "updated"
+                Intent.ACTION_PACKAGE_FULLY_REMOVED -> "removed"
+                else -> return
+            }
+            emit(MacroEvent("package", mapOf("state" to state, "app" to pkg)))
+        }
+    }
+
     private val netCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = wifiChanged(true)
         override fun onLost(network: Network) = wifiChanged(false)
@@ -98,6 +112,13 @@ class MacroService : Service() {
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         }
         ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+        val pkgFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(this, packageReceiver, pkgFilter, ContextCompat.RECEIVER_EXPORTED)
 
         runCatching {
             val cm = getSystemService(ConnectivityManager::class.java)
@@ -115,6 +136,7 @@ class MacroService : Service() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(receiver) }
+        runCatching { unregisterReceiver(packageReceiver) }
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

@@ -13,6 +13,12 @@ object Conditions {
     /** Looks up whether a macro is enabled (null = no such macro); wired up at app start. */
     var macroEnabled: (String) -> Boolean? = { null }
 
+    /** Package of the app in front; wired to the accessibility service at app start. */
+    var foregroundApp: () -> String = { "" }
+
+    /** (app, title, text) of showing notifications; wired to the notification listener at app start. */
+    var activeNotifications: () -> List<Triple<String, String, String>> = { emptyList() }
+
     /** Does trigger number [index] of [macro] match this [event]? */
     fun triggerMatches(macro: Macro, index: Int, step: Step, event: MacroEvent): Boolean {
         val d = event.data
@@ -44,6 +50,17 @@ object Conditions {
                 step.p("device").let { it.isBlank() || (d["device"] ?: "").contains(it, ignoreCase = true) }
 
             "headphones" -> event.type == "headphones" && d["state"] == step.p("state", "plugged")
+
+            "app_launched" -> event.type == "app" &&
+                d["state"] == step.p("state", "opened") &&
+                step.p("app").let { it.isBlank() || it == d["app"] }
+
+            "app_installed" -> event.type == "package" &&
+                d["state"] == step.p("state", "installed") &&
+                step.p("app").let { it.isBlank() || it == d["app"] }
+
+            "screen_text" ->
+                event.type == "screen_text" && d["macro"] == macro.id && d["idx"] == index.toString()
 
             "variable_changed" -> event.type == "variable" &&
                 step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
@@ -78,6 +95,20 @@ object Conditions {
         }
 
         "macro_enabled" -> macroEnabled(step.p("macro")) == (step.p("state", "enabled") == "enabled")
+
+        "app_foreground" -> {
+            val inFront = step.p("app").isNotBlank() && foregroundApp() == step.p("app")
+            inFront == (step.p("state", "foreground") == "foreground")
+        }
+
+        "notification_present" -> {
+            val app = step.p("app")
+            val needle = step.p("contains")
+            val found = activeNotifications().any { (pkg, title, text) ->
+                (app.isBlank() || app == pkg) && (needle.isBlank() || "$title $text".contains(needle, ignoreCase = true))
+            }
+            found == (step.p("state", "present") == "present")
+        }
 
         "time_window" -> {
             val now = LocalTime.now()

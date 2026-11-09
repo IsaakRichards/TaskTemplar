@@ -95,7 +95,9 @@ fun PermissionsScreen(onBack: () -> Unit) {
         ) {
             item {
                 Text(
-                    "Grant only what your macros use. Everything stays on this phone — no ads, no analytics, no accounts.",
+                    "Grant only what your macros use. Everything stays on this phone — no ads, no analytics, no accounts.\n\n" +
+                        "Android 13+: if Accessibility or Notification access is greyed out (“Restricted setting”), open " +
+                        "Settings › Apps › TaskTemplar, tap ⋮ in the top corner, choose “Allow restricted settings”, then try again.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 4.dp),
@@ -118,6 +120,11 @@ fun PermissionsScreen(onBack: () -> Unit) {
             }
         }
     }
+}
+
+private fun accessibilityOn(ctx: Context): Boolean {
+    val enabled = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
+    return enabled.split(':').any { it.startsWith(ctx.packageName + "/") }
 }
 
 private fun has(ctx: Context, perm: String) =
@@ -158,6 +165,11 @@ private fun buildPerms(ctx: Context, request: (Array<String>) -> Unit): List<Per
             am.canScheduleExactAlarms(),
         ) { openSettings(ctx, Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, true) }
     }
+
+    list += Perm(
+        "Accessibility", "Needed for app opened/closed, screen content, and tap / type / scroll / system-button actions.",
+        accessibilityOn(ctx),
+    ) { openSettings(ctx, Settings.ACTION_ACCESSIBILITY_SETTINGS, false) }
 
     list += Perm(
         "Notification access", "Needed for the “Notification received” trigger.",

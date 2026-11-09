@@ -169,6 +169,9 @@ object MacroEngine {
                 "stopped $stopped run(s)"
             }
 
+            "ui_click", "ui_type", "ui_scroll", "ui_swipe", "global_action", "read_screen" ->
+                UiActions.execute(step, vars)
+
             else -> Actions.execute(ctx, step, vars)
         }
     }

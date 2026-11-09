@@ -25,6 +25,17 @@ class BootReceiver : BroadcastReceiver() {
 
 /** Feeds posted notifications to "Notification received" triggers. */
 class NotifListener : NotificationListenerService() {
+
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        instance = this
+    }
+
+    override fun onListenerDisconnected() {
+        instance = null
+        super.onListenerDisconnected()
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (sbn.packageName == packageName) return
         val extras = sbn.notification?.extras ?: return
@@ -34,5 +45,34 @@ class NotifListener : NotificationListenerService() {
             this,
             MacroEvent("notification", mapOf("app" to sbn.packageName, "title" to title, "text" to text)),
         )
+    }
+
+    companion object {
+        @Volatile
+        var instance: NotifListener? = null
+            private set
+
+        /** (app, title, text) of every notification currently showing; empty without notification access. */
+        fun active(): List<Triple<String, String, String>> {
+            val l = instance ?: return emptyList()
+            return runCatching {
+                l.activeNotifications.orEmpty().map { sbn ->
+                    val ex = sbn.notification?.extras
+                    Triple(
+                        sbn.packageName,
+                        ex?.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: "",
+                        ex?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: "",
+                    )
+                }
+            }.getOrDefault(emptyList())
+        }
+
+        /** Dismisses clearable notifications, optionally only from [pkg]. Returns how many. */
+        fun clear(pkg: String): Int {
+            val l = instance ?: error("Notification access is not granted")
+            val targets = l.activeNotifications.orEmpty().filter { it.isClearable && (pkg.isBlank() || it.packageName == pkg) }
+            if (pkg.isBlank()) l.cancelAllNotifications() else targets.forEach { l.cancelNotification(it.key) }
+            return targets.size
+        }
     }
 }

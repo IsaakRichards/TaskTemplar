@@ -9,6 +9,8 @@ import dev.isaakrichards.tasktemplar.engine.Conditions
 import dev.isaakrichards.tasktemplar.engine.MacroEngine
 import dev.isaakrichards.tasktemplar.model.Catalog
 import dev.isaakrichards.tasktemplar.model.MacroEvent
+import dev.isaakrichards.tasktemplar.service.NotifListener
+import dev.isaakrichards.tasktemplar.service.TemplarAccessibility
 import dev.isaakrichards.tasktemplar.engine.Actions
 
 class TemplarApp : Application() {
@@ -18,6 +20,8 @@ class TemplarApp : Application() {
         MacroStore.init(this)
         Catalog.macroName = { id -> MacroStore.get(id)?.name ?: if (id.isBlank()) "(none)" else "(deleted macro)" }
         Conditions.macroEnabled = { id -> MacroStore.get(id)?.enabled }
+        Conditions.foregroundApp = { TemplarAccessibility.foregroundPkg }
+        Conditions.activeNotifications = { NotifListener.active() }
         GlobalVars.onChanged = { v ->
             MacroEngine.dispatch(this, MacroEvent("variable", mapOf("name" to v.name, "value" to v.value)))
         }

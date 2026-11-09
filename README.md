@@ -36,6 +36,13 @@ Stop, global and local variables (integer, decimal, true/false, text) with math 
 text manipulation, run / enable / cancel other macros, a "Variable changed" trigger and
 "Variable value" / "Macro enabled" constraints. Global variables have their own screen (⋮ menu).
 
+**Screen control (v0.3)**: with Accessibility turned on, macros can react to apps opening or
+closing and to text appearing on screen, and can tap / long-press elements (by text, view id or
+coordinates), type into fields, scroll, swipe, read the screen into a variable, and press Back,
+Home, Recents, notification shade, quick settings, power menu, lock screen and screenshot.
+Plus: app installed/removed/updated trigger, app-in-front and notification-present constraints,
+go home, kill background app and clear notifications actions.
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

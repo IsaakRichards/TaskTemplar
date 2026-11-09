@@ -189,6 +189,25 @@ object Actions {
                 if (!Settings.canDrawOverlays(ctx)) "may be blocked in background without 'Display over other apps'" else null
             }
 
+            "launch_home" -> {
+                ctx.startActivity(
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                null
+            }
+
+            "kill_app" -> {
+                val pkg = step.p("app")
+                if (pkg.isBlank()) error("No app chosen")
+                ctx.getSystemService(android.app.ActivityManager::class.java).killBackgroundProcesses(pkg)
+                "asked Android to close $pkg's background processes"
+            }
+
+            "clear_notifications" -> {
+                val n = dev.isaakrichards.tasktemplar.service.NotifListener.clear(step.p("app"))
+                "cleared $n"
+            }
+
             "open_url" -> {
                 val url = t("url")
                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

@@ -115,6 +115,27 @@ object Catalog {
             "variable_changed", T, "Variables", "Variable changed", "Fires when a global variable is set to a new value.",
             listOf(ParamSpec("name", "Variable name", ParamKind.TEXT, optional = true, hint = "Any variable")),
         ) { "Variable ${it.p("name", "(any)")} changed" },
+        StepSpec(
+            "app_launched", T, "Apps", "App opened / closed", "Fires when an app comes to the front or leaves it. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec("state", "When", ParamKind.CHOICE, "opened", listOf("opened" to "App opened", "closed" to "App closed")),
+                ParamSpec("app", "App", ParamKind.APP, optional = true, hint = "Any app"),
+            ),
+        ) { s -> "${s.p("app").ifBlank { "Any app" }} ${s.p("state", "opened")}" },
+        StepSpec(
+            "app_installed", T, "Apps", "App installed / removed / updated", "Fires when apps are installed, uninstalled or updated.",
+            listOf(
+                ParamSpec("state", "When", ParamKind.CHOICE, "installed", listOf("installed" to "Installed", "removed" to "Removed", "updated" to "Updated")),
+                ParamSpec("app", "Package name", ParamKind.APP, optional = true, hint = "Any app"),
+            ),
+        ) { s -> "${s.p("app").ifBlank { "An app" }} ${s.p("state", "installed")}" },
+        StepSpec(
+            "screen_text", T, "Apps", "Screen content", "Fires when text appears on screen. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec("text", "Text on screen contains", ParamKind.TEXT),
+                ParamSpec("app", "Only in app", ParamKind.APP, optional = true, hint = "Any app"),
+            ),
+        ) { s -> "“${s.p("text")}” on screen" + s.p("app").let { if (it.isBlank()) "" else " in $it" } },
     )
 
     private val baseConstraints: List<StepSpec> = listOf(
@@ -278,6 +299,25 @@ object Catalog {
                 ParamSpec("state", "Macro is", ParamKind.CHOICE, "enabled", listOf("enabled" to "Enabled", "disabled" to "Disabled")),
             ),
         ) { "“${macroName(it.p("macro"))}” ${it.p("state", "enabled")}" },
+        StepSpec(
+            "app_foreground", C, "Apps", "App in foreground", "Checks which app is in front. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec("app", "App", ParamKind.APP),
+                ParamSpec("state", "App is", ParamKind.CHOICE, "foreground", listOf("foreground" to "In front", "not_foreground" to "Not in front")),
+            ),
+        ) { s -> "${s.p("app", "?")} ${if (s.p("state", "foreground") == "foreground") "in front" else "not in front"}" },
+        StepSpec(
+            "notification_present", C, "Apps", "Notification present", "Checks the notifications currently showing. Needs notification access.",
+            listOf(
+                ParamSpec("state", "Notification is", ParamKind.CHOICE, "present", listOf("present" to "Showing", "absent" to "Not showing")),
+                ParamSpec("app", "From app", ParamKind.APP, optional = true, hint = "Any app"),
+                ParamSpec("contains", "Title or text contains", ParamKind.TEXT, optional = true),
+            ),
+        ) { s ->
+            "Notification ${if (s.p("state", "present") == "present") "showing" else "not showing"}" +
+                s.p("app").let { if (it.isBlank()) "" else " from $it" } +
+                s.p("contains").let { if (it.isBlank()) "" else " with “$it”" }
+        },
     )
 
     private val logicActions: List<StepSpec> = listOf(
@@ -378,9 +418,85 @@ object Catalog {
         ) { s -> s.p("macro").let { if (it.isBlank()) "Cancel other runs of this macro" else "Cancel “${macroName(it)}”" } },
     )
 
+    private val screenActions: List<StepSpec> = listOf(
+        StepSpec(
+            "ui_click", A, "Screen control", "Tap / long-press", "Presses a button or element in the app on screen. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec(
+                    "target", "Find it by", ParamKind.CHOICE, "text",
+                    listOf("text" to "Text on it", "id" to "View id", "coords" to "Screen coordinates"),
+                ),
+                ParamSpec("text", "Text", ParamKind.TEXT, optional = true, hint = "For “Text on it”"),
+                ParamSpec("match", "Text match", ParamKind.CHOICE, "contains", listOf("contains" to "Contains", "exact" to "Exact")),
+                ParamSpec("id", "View id", ParamKind.TEXT, optional = true, hint = "e.g. send_button or com.app:id/send"),
+                ParamSpec("x", "X", ParamKind.TEXT, optional = true, hint = "For coordinates"),
+                ParamSpec("y", "Y", ParamKind.TEXT, optional = true, hint = "For coordinates"),
+                ParamSpec("press", "Press", ParamKind.CHOICE, "click", listOf("click" to "Tap", "long" to "Long-press")),
+            ),
+        ) { s ->
+            val verb = if (s.p("press", "click") == "long") "Long-press" else "Tap"
+            when (s.p("target", "text")) {
+                "id" -> "$verb id ${s.p("id")}"
+                "coords" -> "$verb at ${s.p("x")},${s.p("y")}"
+                else -> "$verb “${s.p("text")}”"
+            }
+        },
+        StepSpec(
+            "ui_type", A, "Screen control", "Type text", "Fills the focused text field. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec("text", "Text", ParamKind.TEXT, hint = "Magic text allowed"),
+                ParamSpec("mode", "Mode", ParamKind.CHOICE, "replace", listOf("replace" to "Replace field text", "append" to "Add to the end")),
+            ),
+        ) { "Type “${it.p("text")}”" },
+        StepSpec(
+            "ui_scroll", A, "Screen control", "Scroll", "Scrolls the first scrollable list on screen. Needs Accessibility (Permissions screen).",
+            listOf(ParamSpec("direction", "Direction", ParamKind.CHOICE, "forward", listOf("forward" to "Down / forward", "backward" to "Up / back"))),
+        ) { "Scroll ${it.p("direction", "forward")}" },
+        StepSpec(
+            "ui_swipe", A, "Screen control", "Swipe gesture", "Draws a swipe between two points. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec("x1", "Start X", ParamKind.TEXT, "540"),
+                ParamSpec("y1", "Start Y", ParamKind.TEXT, "1600"),
+                ParamSpec("x2", "End X", ParamKind.TEXT, "540"),
+                ParamSpec("y2", "End Y", ParamKind.TEXT, "600"),
+                ParamSpec("ms", "Duration (ms)", ParamKind.TEXT, "300"),
+            ),
+        ) { "Swipe ${it.p("x1")},${it.p("y1")} → ${it.p("x2")},${it.p("y2")}" },
+        StepSpec(
+            "global_action", A, "Screen control", "Press system button", "Back, Home, Recents, notification shade, lock, screenshot and more. Needs Accessibility (Permissions screen).",
+            listOf(
+                ParamSpec(
+                    "button", "Button", ParamKind.CHOICE, "back",
+                    listOf(
+                        "back" to "Back", "home" to "Home", "recents" to "Recent apps",
+                        "notifications" to "Open notifications", "quick_settings" to "Open quick settings",
+                        "power_dialog" to "Power menu", "lock" to "Lock screen", "screenshot" to "Take screenshot",
+                        "split_screen" to "Toggle split screen",
+                    ),
+                ),
+            ),
+        ) { "Press ${it.p("button", "back").replace('_', ' ')}" },
+        StepSpec(
+            "read_screen", A, "Screen control", "Read screen text", "Saves all visible text into a variable. Needs Accessibility (Permissions screen).",
+            listOf(
+                scopeChoice.copy(default = "local"),
+                ParamSpec("name", "Save into variable", ParamKind.TEXT, "screen"),
+            ),
+        ) { "Screen text → ${varRef(it)}" },
+        StepSpec("launch_home", A, "Apps", "Go to home screen", "Opens the launcher.") { "Home screen" },
+        StepSpec(
+            "kill_app", A, "Apps", "Kill background app", "Asks Android to close an app's background processes (can't close the app in front).",
+            listOf(ParamSpec("app", "App", ParamKind.APP)),
+        ) { "Kill ${it.p("app", "?")}" },
+        StepSpec(
+            "clear_notifications", A, "Notify", "Clear notifications", "Dismisses notifications. Needs notification access.",
+            listOf(ParamSpec("app", "Only from app", ParamKind.APP, optional = true, hint = "All apps")),
+        ) { s -> "Clear " + s.p("app").let { if (it.isBlank()) "all" else it } },
+    )
+
     val triggers: List<StepSpec> = baseTriggers + moreTriggers
     val constraints: List<StepSpec> = baseConstraints + logicConstraints
-    val actions: List<StepSpec> = baseActions + logicActions
+    val actions: List<StepSpec> = baseActions + screenActions + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

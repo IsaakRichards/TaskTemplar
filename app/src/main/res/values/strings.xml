@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TaskTemplar</string>
+    <string name="accessibility_description">Lets your TaskTemplar macros see which app is open and what text is on screen, and tap, type, scroll or press buttons for you. Nothing it sees is stored or sent anywhere.</string>
 </resources>
