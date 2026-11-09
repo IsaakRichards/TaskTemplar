@@ -100,6 +100,16 @@ object Conditions {
             in Catalog.simpleStateTriggers -> event.type == step.type &&
                 d["state"] == step.p("state", Catalog.simpleStateTriggers.getValue(step.type))
 
+            "qs_tile" -> event.type == "tile" && d["slot"] == step.p("slot", "1")
+
+            "floating_button" -> event.type == "floating" && d["macro"] == macro.id && d["idx"] == index.toString()
+
+            "notif_button" -> event.type == "notif_button" && d["macro"] == macro.id && d["idx"] == index.toString()
+
+            "intent_received" -> event.type == "intent" && d["action"] == step.p("action").trim()
+
+            "webhook" -> event.type == "webhook" && step.p("name").equals(d["name"], ignoreCase = true)
+
             "variable_changed" -> event.type == "variable" &&
                 step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
 

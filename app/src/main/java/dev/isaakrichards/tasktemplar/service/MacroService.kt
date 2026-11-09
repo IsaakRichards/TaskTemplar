@@ -48,6 +48,21 @@ class MacroService : Service() {
     private var lastGps: Boolean? = null
     private var musicOn: Boolean? = null
     private lateinit var sensors: SensorWatch
+    private lateinit var floating: FloatingButtons
+    private lateinit var webhooks: WebhookServer
+    private var intentActions: Set<String> = emptySet()
+
+    private val intentReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val data = mutableMapOf("action" to (intent.action ?: ""))
+            intent.extras?.keySet()?.forEach { k ->
+                @Suppress("DEPRECATION")
+                val v = intent.extras?.get(k)
+                if (v != null) data[k] = v.toString()
+            }
+            emit(MacroEvent("intent", data))
+        }
+    }
 
     private val playbackCallback = object : AudioManager.AudioPlaybackCallback() {
         override fun onPlaybackConfigChanged(configs: MutableList<android.media.AudioPlaybackConfiguration>?) {
@@ -220,6 +235,8 @@ class MacroService : Service() {
             am.registerAudioPlaybackCallback(playbackCallback, handler)
         }
         sensors = SensorWatch(this) { emit(it) }
+        floating = FloatingButtons(this)
+        webhooks = WebhookServer(this)
         refreshSensors()
 
         AlarmScheduler.rescheduleAll(this)
@@ -229,6 +246,20 @@ class MacroService : Service() {
     private fun refreshSensors() {
         val needs = MacroStore.macros.value.filter { it.enabled }.flatMap { m -> m.triggers.map { it.type } }.toSet()
         sensors.update(needs)
+        floating.update()
+        webhooks.update()
+        startInForeground() // re-posts the notification with current buttons
+
+        val actions = LauncherBridge.usersOf("intent_received").map { it.third.p("action").trim() }.filter { it.isNotEmpty() }.toSet()
+        if (actions != intentActions) {
+            if (intentActions.isNotEmpty()) runCatching { unregisterReceiver(intentReceiver) }
+            intentActions = actions
+            if (actions.isNotEmpty()) {
+                val f = IntentFilter().apply { actions.forEach { addAction(it) } }
+                ContextCompat.registerReceiver(this, intentReceiver, f, ContextCompat.RECEIVER_EXPORTED)
+            }
+        }
+        MacroWidget.refreshAll(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -244,6 +275,9 @@ class MacroService : Service() {
         runCatching { unregisterReceiver(phoneReceiver) }
         runCatching { getSystemService(AudioManager::class.java).unregisterAudioPlaybackCallback(playbackCallback) }
         if (::sensors.isInitialized) sensors.stop()
+        if (::floating.isInitialized) floating.removeAll()
+        if (::webhooks.isInitialized) webhooks.stop()
+        if (intentActions.isNotEmpty()) runCatching { unregisterReceiver(intentReceiver) }
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -283,14 +317,21 @@ class MacroService : Service() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val notification = NotificationCompat.Builder(this, TemplarApp.CHANNEL_SERVICE)
+        val builder = NotificationCompat.Builder(this, TemplarApp.CHANNEL_SERVICE)
             .setSmallIcon(R.drawable.ic_stat)
             .setContentTitle("TaskTemplar is watching")
             .setContentText("Your macros are active")
             .setContentIntent(open)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
-            .build()
+        LauncherBridge.usersOf("notif_button").take(3).forEach { (macro, idx, step) ->
+            builder.addAction(
+                R.drawable.ic_stat,
+                step.p("label").ifBlank { macro.name },
+                ButtonReceiver.pending(this, "notif_button", macro.id, idx),
+            )
+        }
+        val notification = builder.build()
         val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
         ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
     }

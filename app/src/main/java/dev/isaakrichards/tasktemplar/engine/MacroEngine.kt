@@ -73,7 +73,8 @@ object MacroEngine {
         try {
             val vars = baseVars(ctx, macro, event)
             val flow = Flow(macro.actions)
-            val result = flow.run(
+            val result = try {
+                flow.run(
                 cond = { s -> Conditions.allPass(ctx, s.conditions, s.conditionMode, vars) },
                 loopCount = { s -> MagicText.apply(s.p("count", "3"), vars).trim().toDoubleOrNull()?.toInt() ?: 0 },
                 onPass = { pass -> vars["loop_index"] = pass.toString() },
@@ -85,10 +86,16 @@ object MacroEngine {
                     if (note != null) MacroStore.log(macro.name, "$label: $note")
                 } catch (e: CancellationException) {
                     throw e
+                } catch (e: StopMacroException) {
+                    throw e
                 } catch (e: Throwable) {
                     failures++
                     MacroStore.log(macro.name, "✗ $label failed: ${e.message ?: e.javaClass.simpleName}")
                 }
+            }
+            } catch (e: StopMacroException) {
+                MacroStore.log(macro.name, e.message ?: "Stopped")
+                Flow.Result.STOPPED
             }
             val ending = when (result) {
                 Flow.Result.STOPPED -> " (stopped)"
@@ -134,6 +141,52 @@ object MacroEngine {
                     else -> input.uppercase()
                 }
                 assign(step, vars, VarTypes.STRING, result)
+                null
+            }
+
+            "dialog_message" -> {
+                Dialogs.ask(ctx, "message", t("title"), t("message"), timeoutSec = t("timeout", "120").toLongOrNull() ?: 120)
+                null
+            }
+
+            "dialog_options" -> {
+                val options = t("options").split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                if (options.isEmpty()) error("No options given")
+                val choice = Dialogs.ask(ctx, "options", t("title"), t("message"), options, t("timeout", "120").toLongOrNull() ?: 120)
+                vars["option"] = choice ?: ""
+                vars["option_index"] = (choice?.let { options.indexOf(it) + 1 } ?: 0).toString()
+                if (choice == null && step.p("on_cancel", "continue") == "stop") throw StopMacroException("Stopped: no option chosen")
+                choice?.let { "chose “$it”" } ?: "dismissed"
+            }
+
+            "confirm" -> {
+                val answer = Dialogs.ask(ctx, "confirm", t("title", "Continue?"), t("message"), timeoutSec = t("timeout", "120").toLongOrNull() ?: 120)
+                val yes = answer == "yes"
+                vars["confirmed"] = yes.toString()
+                if (!yes && step.p("on_no", "stop") == "stop") throw StopMacroException("Stopped: not confirmed")
+                if (yes) "yes" else "no"
+            }
+
+            "input_dialog" -> {
+                val text = Dialogs.ask(ctx, "input", t("title"), t("message"), timeoutSec = t("timeout", "120").toLongOrNull() ?: 120)
+                if (text == null && step.p("on_cancel", "continue") == "stop") throw StopMacroException("Stopped: input cancelled")
+                assign(step, vars, VarTypes.STRING, text ?: "")
+                null
+            }
+
+            "send_intent" -> {
+                val intent = android.content.Intent()
+                t("action").takeIf { it.isNotBlank() }?.let { intent.action = it }
+                t("data").takeIf { it.isNotBlank() }?.let { intent.data = android.net.Uri.parse(it) }
+                t("package").takeIf { it.isNotBlank() }?.let { intent.setPackage(it) }
+                t("extras").split(';').map { it.trim() }.filter { '=' in it }.forEach {
+                    intent.putExtra(it.substringBefore('=').trim(), it.substringAfter('=').trim())
+                }
+                when (step.p("target", "activity")) {
+                    "broadcast" -> ctx.sendBroadcast(intent)
+                    "service" -> ctx.startService(intent)
+                    else -> ctx.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
                 null
             }
 

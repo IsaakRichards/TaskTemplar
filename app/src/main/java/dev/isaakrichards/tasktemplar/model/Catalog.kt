@@ -754,9 +754,95 @@ object Catalog {
         ) { (if (it.p("root", "no") == "yes") "# " else "$ ") + it.p("command") },
     )
 
-    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers
+    // ---- Stage 5: launchers and dialogs ----
+
+    private val launcherTriggers: List<StepSpec> = listOf(
+        StepSpec(
+            "qs_tile", T, "Launchers", "Quick-settings tile", "Adds a tile to the pull-down quick settings (edit your tiles and drag in “TaskTemplar 1/2/3”).",
+            listOf(ParamSpec("slot", "Tile slot", ParamKind.CHOICE, "1", listOf("1" to "TaskTemplar 1", "2" to "TaskTemplar 2", "3" to "TaskTemplar 3"))),
+        ) { "Quick-settings tile ${it.p("slot", "1")}" },
+        StepSpec(
+            "floating_button", T, "Launchers", "Floating button", "A draggable bubble over all apps. Needs “Display over other apps”.",
+            listOf(
+                ParamSpec("label", "Label (1–3 letters)", ParamKind.TEXT, optional = true, hint = "Defaults to the macro name"),
+                ParamSpec("color", "Colour (hex)", ParamKind.TEXT, "#B69CFF"),
+                ParamSpec("size", "Size (dp)", ParamKind.NUMBER, "52"),
+                ParamSpec("opacity", "Opacity (%)", ParamKind.NUMBER, "90"),
+            ),
+        ) { "Floating button ${it.p("label")}".trim() },
+        StepSpec(
+            "notif_button", T, "Launchers", "Notification button", "Adds a button to TaskTemplar's status notification (expand it to see; up to 3).",
+            listOf(ParamSpec("label", "Button label", ParamKind.TEXT, optional = true, hint = "Defaults to the macro name")),
+        ) { "Notification button ${it.p("label")}".trim() },
+        StepSpec(
+            "intent_received", T, "Launchers", "Intent received", "Fires when another app (Tasker, scripts, adb) sends a broadcast with this action. Extras become magic text.",
+            listOf(ParamSpec("action", "Intent action", ParamKind.TEXT, "dev.isaakrichards.tasktemplar.RUN")),
+        ) { "Intent ${it.p("action")}" },
+        StepSpec(
+            "webhook", T, "Launchers", "Webhook (local network)",
+            "Fires when http://PHONE-IP:PORT/hook/NAME is opened from your network. Query values and {body} become magic text.",
+            listOf(
+                ParamSpec("name", "Hook name", ParamKind.TEXT, "lights"),
+                ParamSpec("port", "Port (shared by all hooks)", ParamKind.NUMBER, "8765"),
+                ParamSpec("token", "Secret token (?token=…)", ParamKind.TEXT, optional = true, hint = "Recommended"),
+            ),
+        ) { "Webhook /hook/${it.p("name")}" },
+    )
+
+    private val dialogActions: List<StepSpec> = listOf(
+        StepSpec(
+            "dialog_message", A, "Dialogs", "Message dialog", "Shows a pop-up message and waits for OK. Needs “Display over other apps” when the app isn't open.",
+            listOf(
+                ParamSpec("title", "Title", ParamKind.TEXT, optional = true),
+                ParamSpec("message", "Message", ParamKind.TEXT, hint = "Magic text allowed"),
+                ParamSpec("timeout", "Give up after (seconds)", ParamKind.NUMBER, "120"),
+            ),
+        ) { "Show “${it.p("title").ifBlank { it.p("message") }}”" },
+        StepSpec(
+            "dialog_options", A, "Dialogs", "Option dialog", "Lets you pick from a list. Choice goes to {option} and {option_index}.",
+            listOf(
+                ParamSpec("title", "Title", ParamKind.TEXT, optional = true),
+                ParamSpec("message", "Message", ParamKind.TEXT, optional = true),
+                ParamSpec("options", "Options (comma separated)", ParamKind.TEXT, "Yes, No, Later"),
+                ParamSpec("on_cancel", "If dismissed", ParamKind.CHOICE, "continue", listOf("continue" to "Carry on", "stop" to "Stop the macro")),
+                ParamSpec("timeout", "Give up after (seconds)", ParamKind.NUMBER, "120"),
+            ),
+        ) { "Choose: ${it.p("options")}" },
+        StepSpec(
+            "confirm", A, "Dialogs", "Confirm (yes / no)", "Asks before carrying on. Answer goes to {confirmed}.",
+            listOf(
+                ParamSpec("title", "Title", ParamKind.TEXT, "Continue?"),
+                ParamSpec("message", "Message", ParamKind.TEXT, optional = true),
+                ParamSpec("on_no", "If No", ParamKind.CHOICE, "stop", listOf("stop" to "Stop the macro", "continue" to "Carry on (check {confirmed})")),
+                ParamSpec("timeout", "Give up after (seconds)", ParamKind.NUMBER, "120"),
+            ),
+        ) { "Confirm “${it.p("title", "Continue?")}”" },
+        StepSpec(
+            "input_dialog", A, "Dialogs", "Text input dialog", "Asks you to type something and saves it into a variable.",
+            listOf(
+                ParamSpec("title", "Title", ParamKind.TEXT, optional = true),
+                ParamSpec("message", "Prompt", ParamKind.TEXT, optional = true),
+                scopeChoice.copy(default = "local"),
+                ParamSpec("name", "Save into variable", ParamKind.TEXT, "input"),
+                ParamSpec("on_cancel", "If cancelled", ParamKind.CHOICE, "continue", listOf("continue" to "Carry on", "stop" to "Stop the macro")),
+                ParamSpec("timeout", "Give up after (seconds)", ParamKind.NUMBER, "120"),
+            ),
+        ) { "Ask → ${varRef(it)}" },
+        StepSpec(
+            "send_intent", A, "Advanced", "Send intent", "Sends an Android intent: talk to Tasker, Home Assistant, Termux and other apps.",
+            listOf(
+                ParamSpec("target", "Send as", ParamKind.CHOICE, "activity", listOf("activity" to "Start activity", "broadcast" to "Broadcast", "service" to "Start service")),
+                ParamSpec("action", "Action", ParamKind.TEXT, optional = true),
+                ParamSpec("data", "Data URI", ParamKind.TEXT, optional = true),
+                ParamSpec("package", "Package", ParamKind.TEXT, optional = true),
+                ParamSpec("extras", "Extras (key=value; key2=value2)", ParamKind.TEXT, optional = true),
+            ),
+        ) { "Intent ${it.p("action").ifBlank { it.p("data") }}" },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers
     val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints
-    val actions: List<StepSpec> = baseActions + screenActions + phoneActions + deviceActions + logicActions
+    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.isaakrichards.tasktemplar.engine.MacroEngine
+import dev.isaakrichards.tasktemplar.service.LauncherBridge
 import dev.isaakrichards.tasktemplar.model.Catalog
 import dev.isaakrichards.tasktemplar.model.Macro
 import dev.isaakrichards.tasktemplar.model.Step
@@ -110,6 +112,10 @@ fun MacroEditorScreen(
                         Toast.makeText(ctx, "Test run started — see the log", Toast.LENGTH_SHORT).show()
                     }) { Icon(Icons.Default.PlayArrow, "Test run") }
                     if (!isNew) {
+                        IconButton(onClick = {
+                            val ok = LauncherBridge.pinShortcut(ctx, macro)
+                            if (!ok) Toast.makeText(ctx, "Your launcher doesn't support pinned shortcuts", Toast.LENGTH_LONG).show()
+                        }) { Icon(Icons.Default.Home, "Add to home screen") }
                         IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Default.Delete, "Delete") }
                     }
                     IconButton(onClick = {

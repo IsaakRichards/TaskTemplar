@@ -57,6 +57,12 @@ newer Android, otherwise they open the right settings panel), auto-rotate, scree
 awake, screen on, media keys, volume up/down, play / stop sound, set alarm clock, car mode,
 wallpaper, and a shell-command action with optional root.
 
+**Launchers & dialogs (v0.6)**: home-screen shortcuts (🏠 in the editor), a home-screen widget,
+three quick-settings tiles, draggable floating buttons, buttons on the status notification,
+"Intent received" (for Tasker, Termux, adb…) and a **local-network webhook**
+(`http://PHONE-IP:8765/hook/NAME?token=…`) that your home server can call. Dialog actions: message,
+option list (`{option}`), yes/no confirm (`{confirmed}`, can stop the macro), text input, plus Send intent.
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

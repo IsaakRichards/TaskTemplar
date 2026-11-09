@@ -90,6 +90,78 @@
             </intent-filter>
         </service>
 
+        <activity
+            android:name=".ui.DialogActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="standard"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TaskTemplar.Translucent" />
+
+        <activity
+            android:name=".ui.ShortcutRunActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TaskTemplar.Translucent" />
+
+        <activity
+            android:name=".ui.WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.TaskTemplar">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name=".service.MacroWidget"
+            android:exported="true"
+            android:label="TaskTemplar macro">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".service.ButtonReceiver"
+            android:exported="false" />
+
+        <service
+            android:name=".service.TileSlot1"
+            android:exported="true"
+            android:icon="@drawable/ic_stat"
+            android:label="TaskTemplar 1"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".service.TileSlot2"
+            android:exported="true"
+            android:icon="@drawable/ic_stat"
+            android:label="TaskTemplar 2"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".service.TileSlot3"
+            android:exported="true"
+            android:icon="@drawable/ic_stat"
+            android:label="TaskTemplar 3"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <service
             android:name=".service.TemplarAccessibility"
             android:exported="true"
