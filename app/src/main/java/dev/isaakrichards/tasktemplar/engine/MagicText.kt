@@ -9,7 +9,10 @@ import dev.isaakrichards.tasktemplar.data.GlobalVars
  *  - {key}     → any run value (time, battery, trigger data, local variables…)
  */
 object MagicText {
-    private val varRef = Regex("""\{(v|lv)=([^}]+)\}""")
+    private val varRef = Regex("""\{(v|lv|sw)=([^}]+)\}""")
+
+    /** Seconds on a named stopwatch, for {sw=name}. */
+    var stopwatch: (String) -> String = { "0" }
 
     /** Lookup for global variables; swapped out in unit tests. */
     var global: (String) -> String = { GlobalVars.valueOf(it) }
@@ -18,7 +21,11 @@ object MagicText {
         if (!text.contains('{')) return text
         val withVars = varRef.replace(text) { m ->
             val name = m.groupValues[2].trim()
-            if (m.groupValues[1] == "v") global(name) else vars[name] ?: ""
+            when (m.groupValues[1]) {
+                "v" -> global(name)
+                "sw" -> stopwatch(name)
+                else -> vars[name] ?: ""
+            }
         }
         return vars.entries.fold(withVars) { acc, (k, v) -> acc.replace("{$k}", v) }
     }

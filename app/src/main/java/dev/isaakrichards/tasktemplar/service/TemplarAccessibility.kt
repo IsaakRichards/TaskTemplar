@@ -51,6 +51,14 @@ class TemplarAccessibility : AccessibilityService() {
                 else -> null
             }
             if (state != null) MacroEngine.dispatch(this, MacroEvent("volume_button", mapOf("state" to state)))
+            val media = when (event.keyCode) {
+                android.view.KeyEvent.KEYCODE_HEADSETHOOK, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                android.view.KeyEvent.KEYCODE_MEDIA_PLAY, android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> "play_pause"
+                android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> "next"
+                android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "previous"
+                else -> null
+            }
+            if (media != null) MacroEngine.dispatch(this, MacroEvent("media_button", mapOf("state" to media)))
         }
         return false // never swallow the key
     }

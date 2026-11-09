@@ -190,6 +190,22 @@ object MacroEngine {
                 null
             }
 
+            "stopwatch_op" -> {
+                val name = t("name", "timer").trim()
+                Stopwatches.op(ctx, name, step.p("op", "start"))
+                AlarmScheduler.rescheduleAll(ctx)
+                "${name}: ${Stopwatches.elapsedMs(ctx, name) / 1000}s"
+            }
+
+            "get_weather" -> {
+                val (lat, lng) = GeoMath.parse(t("location"))
+                    ?: Geo.current(ctx)?.let { it.latitude to it.longitude }
+                    ?: error("No location for the weather lookup")
+                val w = Weather.fetch(lat, lng, step.p("unit", "fahrenheit") == "fahrenheit")
+                Weather.putVars(w, vars)
+                "${vars["temp"]}°, ${w.description}"
+            }
+
             "log" -> {
                 MacroStore.log(macro.name, t("text"))
                 null

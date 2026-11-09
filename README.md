@@ -63,6 +63,13 @@ three quick-settings tiles, draggable floating buttons, buttons on the status no
 (`http://PHONE-IP:8765/hook/NAME?token=…`) that your home server can call. Dialog actions: message,
 option list (`{option}`), yes/no confirm (`{confirmed}`, can stop the macro), text input, plus Send intent.
 
+**More triggers (v0.7)**: day of month, calendar events (`{event_title}`), stopwatch / countdown,
+weather (Open-Meteo: no account, no key), power-button presses, media/headset buttons, light level,
+edge swipes, NFC tags, failed unlock (device admin), data-connection changes, VPN, hotspot, auto-sync,
+screensaver, Wi-Fi network in range, SMS sent and clipboard changed. New constraints: logic groups
+(AND / OR / NOT / NAND), light level, proximity, stopwatch value, hotspot, VPN, auto-sync. New actions:
+Stopwatch (`{sw=name}`) and Get weather (`{temp}`, `{weather}`…).
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

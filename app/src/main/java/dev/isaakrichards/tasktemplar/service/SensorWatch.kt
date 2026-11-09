@@ -21,8 +21,11 @@ class SensorWatch(private val ctx: Context, private val emit: (MacroEvent) -> Un
     private val sm = ctx.getSystemService(SensorManager::class.java)
     private val accelSensor: Sensor? = sm?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val proxSensor: Sensor? = sm?.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+    private val lightSensor: Sensor? = sm?.getDefaultSensor(Sensor.TYPE_LIGHT)
     private var accelOn = false
     private var proxOn = false
+    private var lightOn = false
+    private var lastLux = Double.NaN
     private var orientation: OrientationEventListener? = null
 
     private var lastShake = 0L
@@ -41,12 +44,25 @@ class SensorWatch(private val ctx: Context, private val emit: (MacroEvent) -> Un
             accelOn = wantAccel
             if (!wantAccel) faceDown = null
         }
-        val wantProx = "proximity" in needs
+        val wantProx = "proximity" in needs || "proximity_state" in needs
         if (wantProx != proxOn && proxSensor != null && sm != null) {
             if (wantProx) sm.registerListener(this, proxSensor, SensorManager.SENSOR_DELAY_NORMAL)
             else sm.unregisterListener(this, proxSensor)
             proxOn = wantProx
-            if (!wantProx) lastProx = null
+            if (!wantProx) {
+                lastProx = null
+                latest.remove("near")
+            }
+        }
+        val wantLight = "light" in needs || "light_level" in needs
+        if (wantLight != lightOn && lightSensor != null && sm != null) {
+            if (wantLight) sm.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
+            else sm.unregisterListener(this, lightSensor)
+            lightOn = wantLight
+            if (!wantLight) {
+                lastLux = Double.NaN
+                latest.remove("lux")
+            }
         }
         val wantOrient = "orientation" in needs
         if (wantOrient && orientation == null) {
@@ -73,6 +89,11 @@ class SensorWatch(private val ctx: Context, private val emit: (MacroEvent) -> Un
     }
 
     fun stop() = update(emptySet())
+
+    companion object {
+        /** Latest readings for constraints: "lux", "near" (1/0). */
+        val latest = java.util.concurrent.ConcurrentHashMap<String, Double>()
+    }
 
     override fun onSensorChanged(e: SensorEvent) {
         val now = SystemClock.elapsedRealtime()
@@ -102,9 +123,11 @@ class SensorWatch(private val ctx: Context, private val emit: (MacroEvent) -> Un
                     }
                 }
             }
+            Sensor.TYPE_LIGHT -> onLight(e.values[0].toDouble(), now)
             Sensor.TYPE_PROXIMITY -> {
                 val near = e.values[0] < min(e.sensor.maximumRange, 5f)
                 val st = if (near) "near" else "far"
+                latest["near"] = if (near) 1.0 else 0.0
                 if (st != lastProx) {
                     val first = lastProx == null
                     lastProx = st
@@ -112,6 +135,21 @@ class SensorWatch(private val ctx: Context, private val emit: (MacroEvent) -> Un
                 }
             }
         }
+    }
+
+    private var lastLightEmit = 0L
+
+    private fun onLight(lux: Double, now: Long) {
+        latest["lux"] = lux
+        if (lastLux.isNaN()) {
+            lastLux = lux
+            return
+        }
+        // Light jitters constantly; only report meaningful changes, at most every 2 s.
+        if (now - lastLightEmit < 2000 || kotlin.math.abs(lux - lastLux) < maxOf(1.0, lastLux * 0.15)) return
+        emit(MacroEvent("light", mapOf("lux" to lux.toString(), "prev" to lastLux.toString())))
+        lastLux = lux
+        lastLightEmit = now
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}

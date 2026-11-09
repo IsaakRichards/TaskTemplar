@@ -246,9 +246,54 @@ class FloatingButtons(private val ctx: Context) {
         }
     }
 
+    private val edges = HashMap<String, View>()
+
+    /** Thin invisible strips that turn an inward swipe into an "Edge swipe" trigger. */
+    @SuppressLint("ClickableViewAccessibility")
+    fun updateEdges() {
+        edges.values.forEach { runCatching { wm.removeView(it) } }
+        edges.clear()
+        if (!Settings.canDrawOverlays(ctx)) return
+        val dm = ctx.resources.displayMetrics
+        for ((macro, idx, step) in LauncherBridge.usersOf("edge_swipe")) {
+            val left = step.p("edge", "right") == "left"
+            val height = (dm.heightPixels * 0.3).toInt()
+            val y = when (step.p("position", "middle")) {
+                "top" -> (dm.heightPixels * 0.1).toInt()
+                "bottom" -> (dm.heightPixels * 0.6).toInt()
+                else -> (dm.heightPixels * 0.35).toInt()
+            }
+            val lp = WindowManager.LayoutParams(
+                (14 * dm.density).toInt(), height, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT,
+            ).apply {
+                gravity = Gravity.TOP or (if (left) Gravity.START else Gravity.END)
+                this.y = y
+            }
+            val strip = View(ctx)
+            var downX = 0f
+            strip.setOnTouchListener { _, e ->
+                when (e.action) {
+                    MotionEvent.ACTION_DOWN -> downX = e.rawX
+                    MotionEvent.ACTION_UP -> {
+                        val dx = e.rawX - downX
+                        if ((left && dx > 60 * dm.density) || (!left && dx < -60 * dm.density)) {
+                            MacroEngine.dispatch(ctx, MacroEvent("edge_swipe", mapOf("macro" to macro.id, "idx" to idx.toString())))
+                        }
+                    }
+                }
+                true
+            }
+            runCatching { wm.addView(strip, lp) }.onSuccess { edges["${macro.id}#$idx"] = strip }
+        }
+    }
+
     fun removeAll() {
         shown.values.forEach { runCatching { wm.removeView(it) } }
         shown.clear()
+        edges.values.forEach { runCatching { wm.removeView(it) } }
+        edges.clear()
     }
 }
 

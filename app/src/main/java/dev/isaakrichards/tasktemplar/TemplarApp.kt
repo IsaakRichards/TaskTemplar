@@ -8,6 +8,9 @@ import dev.isaakrichards.tasktemplar.data.MacroStore
 import android.telephony.TelephonyManager
 import dev.isaakrichards.tasktemplar.engine.Conditions
 import dev.isaakrichards.tasktemplar.engine.Geo
+import dev.isaakrichards.tasktemplar.engine.MagicText
+import dev.isaakrichards.tasktemplar.engine.Stopwatches
+import dev.isaakrichards.tasktemplar.service.SensorWatch
 import dev.isaakrichards.tasktemplar.engine.MacroEngine
 import dev.isaakrichards.tasktemplar.model.Catalog
 import dev.isaakrichards.tasktemplar.model.MacroEvent
@@ -24,6 +27,9 @@ class TemplarApp : Application() {
         Conditions.macroEnabled = { id -> MacroStore.get(id)?.enabled }
         Conditions.foregroundApp = { TemplarAccessibility.foregroundPkg }
         Conditions.activeNotifications = { NotifListener.active() }
+        Conditions.sensorValue = { key -> SensorWatch.latest[key] }
+        Conditions.stopwatchSeconds = { name -> Stopwatches.elapsedMs(this, name) / 1000.0 }
+        MagicText.stopwatch = { name -> (Stopwatches.elapsedMs(this, name) / 1000).toString() }
         Conditions.lastLocation = { Geo.lastKnown(this)?.let { it.latitude to it.longitude } }
         Conditions.callState = {
             runCatching {

@@ -49,6 +49,79 @@ class MacroService : Service() {
     private var musicOn: Boolean? = null
     private lateinit var sensors: SensorWatch
     private lateinit var floating: FloatingButtons
+    private val screenToggles = ArrayDeque<Long>()
+    private var lastConnection: String? = null
+    private var lastVpn: Boolean? = null
+    private var lastSmsId = -1L
+    private var lastSync: Boolean? = null
+    private var syncHandle: Any? = null
+    private val ssidPresent = HashMap<String, Boolean>()
+
+    private val defaultNetCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = checkConnection()
+        override fun onLost(network: Network) = checkConnection()
+    }
+
+    private fun checkConnection() {
+        handler.post {
+            val type = DeviceState.connectionType(this)
+            val vpn = DeviceState.flag(this, "vpn")
+            if (lastConnection != null && type != lastConnection) emit(MacroEvent("connection", mapOf("state" to type)))
+            if (lastVpn != null && vpn != lastVpn) emit(MacroEvent("vpn", mapOf("state" to if (vpn) "on" else "off")))
+            lastConnection = type
+            lastVpn = vpn
+        }
+    }
+
+    private val smsObserver = object : android.database.ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            runCatching {
+                contentResolver.query(
+                    android.provider.Telephony.Sms.Sent.CONTENT_URI,
+                    arrayOf(android.provider.Telephony.Sms._ID, android.provider.Telephony.Sms.ADDRESS, android.provider.Telephony.Sms.BODY),
+                    null, null, "${android.provider.Telephony.Sms._ID} DESC",
+                )?.use { c ->
+                    if (c.moveToFirst()) {
+                        val id = c.getLong(0)
+                        if (lastSmsId >= 0 && id > lastSmsId) {
+                            emit(MacroEvent("sms_sent", mapOf("number" to (c.getString(1) ?: ""), "text" to (c.getString(2) ?: ""))))
+                        }
+                        lastSmsId = id
+                    }
+                }
+            }
+        }
+    }
+
+    private val clipListener = android.content.ClipboardManager.OnPrimaryClipChangedListener {
+        val clip = runCatching {
+            getSystemService(android.content.ClipboardManager::class.java).primaryClip?.getItemAt(0)?.coerceToText(this)?.toString()
+        }.getOrNull() ?: ""
+        emit(MacroEvent("clipboard", mapOf("clip" to clip)))
+    }
+
+    /** Fires "Wi-Fi network in range" triggers from scan results. */
+    @android.annotation.SuppressLint("MissingPermission")
+    private fun onScanResults() {
+        val users = LauncherBridge.usersOf("wifi_in_range")
+        if (users.isEmpty()) return
+        val seen = runCatching {
+            getSystemService(android.net.wifi.WifiManager::class.java).scanResults.map {
+                @Suppress("DEPRECATION")
+                val name = it.SSID
+                name.trim('"').lowercase()
+            }.toSet()
+        }.getOrNull() ?: return
+        for ((macro, idx, step) in users) {
+            val key = "${macro.id}#$idx"
+            val present = step.p("ssid").trim().lowercase() in seen
+            val was = ssidPresent[key]
+            ssidPresent[key] = present
+            if (was != null && was != present && present == (step.p("state", "appears") == "appears")) {
+                emit(MacroEvent("wifi_in_range", mapOf("macro" to macro.id, "idx" to idx.toString())))
+            }
+        }
+    }
     private lateinit var webhooks: WebhookServer
     private var intentActions: Set<String> = emptySet()
 
@@ -98,8 +171,20 @@ class MacroService : Service() {
                 }
                 Intent.ACTION_POWER_CONNECTED -> emit(MacroEvent("power", mapOf("state" to "connected")))
                 Intent.ACTION_POWER_DISCONNECTED -> emit(MacroEvent("power", mapOf("state" to "disconnected")))
-                Intent.ACTION_SCREEN_ON -> emit(MacroEvent("screen", mapOf("state" to "on")))
-                Intent.ACTION_SCREEN_OFF -> emit(MacroEvent("screen", mapOf("state" to "off")))
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF -> {
+                    val on = intent.action == Intent.ACTION_SCREEN_ON
+                    emit(MacroEvent("screen", mapOf("state" to if (on) "on" else "off")))
+                    countPowerPresses()
+                }
+                Intent.ACTION_DREAMING_STARTED -> emit(MacroEvent("daydream", mapOf("state" to "started")))
+                Intent.ACTION_DREAMING_STOPPED -> emit(MacroEvent("daydream", mapOf("state" to "stopped")))
+                "android.net.wifi.WIFI_AP_STATE_CHANGED" -> {
+                    when (intent.getIntExtra("wifi_state", -1)) {
+                        13 -> emit(MacroEvent("hotspot", mapOf("state" to "on")))
+                        11 -> emit(MacroEvent("hotspot", mapOf("state" to "off")))
+                    }
+                }
+                android.net.wifi.WifiManager.SCAN_RESULTS_AVAILABLE_ACTION -> onScanResults()
                 Intent.ACTION_USER_PRESENT -> emit(MacroEvent("screen", mapOf("state" to "unlocked")))
                 AudioManager.ACTION_HEADSET_PLUG -> {
                     if (isInitialStickyBroadcast) return
@@ -207,6 +292,10 @@ class MacroService : Service() {
             addAction(Intent.ACTION_DOCK_EVENT)
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(android.hardware.usb.UsbManager.ACTION_USB_DEVICE_DETACHED)
+            addAction(Intent.ACTION_DREAMING_STARTED)
+            addAction(Intent.ACTION_DREAMING_STOPPED)
+            addAction("android.net.wifi.WIFI_AP_STATE_CHANGED")
+            addAction(android.net.wifi.WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
         }
         lastRinger = DeviceState.ringerMode(this)
         lastGps = DeviceState.flag(this, "gps")
@@ -234,6 +323,24 @@ class MacroService : Service() {
             musicOn = am.isMusicActive
             am.registerAudioPlaybackCallback(playbackCallback, handler)
         }
+        runCatching { getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(defaultNetCallback) }
+        lastConnection = DeviceState.connectionType(this)
+        lastVpn = DeviceState.flag(this, "vpn")
+        runCatching {
+            smsObserver.onChange(false) // remember the newest sent SMS
+            contentResolver.registerContentObserver(android.provider.Telephony.Sms.CONTENT_URI, true, smsObserver)
+        }
+        runCatching { getSystemService(android.content.ClipboardManager::class.java).addPrimaryClipChangedListener(clipListener) }
+        lastSync = DeviceState.flag(this, "autosync")
+        syncHandle = runCatching {
+            android.content.ContentResolver.addStatusChangeListener(android.content.ContentResolver.SYNC_OBSERVER_TYPE_SETTINGS) {
+                handler.post {
+                    val now = DeviceState.flag(this, "autosync")
+                    if (lastSync != null && now != lastSync) emit(MacroEvent("autosync", mapOf("state" to if (now) "on" else "off")))
+                    lastSync = now
+                }
+            }
+        }.getOrNull()
         sensors = SensorWatch(this) { emit(it) }
         floating = FloatingButtons(this)
         webhooks = WebhookServer(this)
@@ -244,9 +351,13 @@ class MacroService : Service() {
 
     /** Turns sensors on/off depending on which triggers enabled macros use. */
     private fun refreshSensors() {
-        val needs = MacroStore.macros.value.filter { it.enabled }.flatMap { m -> m.triggers.map { it.type } }.toSet()
+        val needs = MacroStore.macros.value.filter { it.enabled }.flatMap { m ->
+            m.triggers.map { it.type } + m.constraints.flatMap { c -> listOf(c.type) + c.conditions.map { it.type } } +
+                m.actions.flatMap { a -> a.conditions.map { it.type } }
+        }.toSet()
         sensors.update(needs)
         floating.update()
+        floating.updateEdges()
         webhooks.update()
         startInForeground() // re-posts the notification with current buttons
 
@@ -276,6 +387,10 @@ class MacroService : Service() {
         runCatching { getSystemService(AudioManager::class.java).unregisterAudioPlaybackCallback(playbackCallback) }
         if (::sensors.isInitialized) sensors.stop()
         if (::floating.isInitialized) floating.removeAll()
+        runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(defaultNetCallback) }
+        runCatching { contentResolver.unregisterContentObserver(smsObserver) }
+        runCatching { getSystemService(android.content.ClipboardManager::class.java).removePrimaryClipChangedListener(clipListener) }
+        syncHandle?.let { runCatching { android.content.ContentResolver.removeStatusChangeListener(it) } }
         if (::webhooks.isInitialized) webhooks.stop()
         if (intentActions.isNotEmpty()) runCatching { unregisterReceiver(intentReceiver) }
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
@@ -284,6 +399,21 @@ class MacroService : Service() {
     }
 
     private fun emit(event: MacroEvent) = MacroEngine.dispatch(this, event)
+
+    /** Counts quick screen on/off toggles for the "Power button presses" trigger. */
+    private fun countPowerPresses() {
+        val users = LauncherBridge.usersOf("power_button")
+        if (users.isEmpty()) return
+        val now = SystemClock.elapsedRealtime()
+        val window = users.maxOf { (it.third.p("window", "3").toLongOrNull() ?: 3L) } * 1000
+        screenToggles.addLast(now)
+        while (screenToggles.isNotEmpty() && now - screenToggles.first() > window) screenToggles.removeFirst()
+        val count = screenToggles.size
+        if (users.any { count == (it.third.p("presses", "3").toIntOrNull() ?: 3) }) {
+            emit(MacroEvent("power_button", mapOf("count" to count.toString())))
+            if (count >= users.maxOf { it.third.p("presses", "3").toIntOrNull() ?: 3 }) screenToggles.clear()
+        }
+    }
 
     private fun wifiChanged(up: Boolean) {
         handler.post {

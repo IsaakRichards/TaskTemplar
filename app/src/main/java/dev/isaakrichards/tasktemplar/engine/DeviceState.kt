@@ -56,9 +56,30 @@ object DeviceState {
             "power_save" -> ctx.getSystemService(PowerManager::class.java).isPowerSaveMode
             "docked" -> ctx.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_DOCK_EVENT))
                 ?.getIntExtra(android.content.Intent.EXTRA_DOCK_STATE, 0).let { it != null && it != android.content.Intent.EXTRA_DOCK_STATE_UNDOCKED }
+            "vpn" -> {
+                val cm = ctx.getSystemService(ConnectivityManager::class.java)
+                cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            }
+            "autosync" -> android.content.ContentResolver.getMasterSyncAutomatically()
+            "hotspot" -> {
+                val wm = ctx.applicationContext.getSystemService(WifiManager::class.java)
+                wm.javaClass.getMethod("isWifiApEnabled").invoke(wm) as Boolean
+            }
             else -> false
         }
     }.getOrDefault(false)
+
+    /** "wifi", "mobile", "ethernet" or "none". */
+    fun connectionType(ctx: Context): String {
+        val cm = ctx.getSystemService(ConnectivityManager::class.java) ?: return "none"
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return "none"
+        return when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "other"
+        }
+    }
 
     fun ringerMode(ctx: Context): String = when (ctx.getSystemService(android.media.AudioManager::class.java)?.ringerMode) {
         android.media.AudioManager.RINGER_MODE_SILENT -> "silent"

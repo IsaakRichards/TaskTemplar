@@ -25,6 +25,12 @@ object Conditions {
     /** Last known (lat, lng); wired to LocationManager at app start. */
     var lastLocation: () -> Pair<Double, Double>? = { null }
 
+    /** Latest sensor reading ("lux", "near" = 1/0), null if that sensor isn't running. */
+    var sensorValue: (String) -> Double? = { null }
+
+    /** Seconds on a named stopwatch. */
+    var stopwatchSeconds: (String) -> Double = { 0.0 }
+
     /** Today's date; replaceable in tests. */
     var today: () -> LocalDate = { LocalDate.now() }
 
@@ -32,7 +38,7 @@ object Conditions {
     fun triggerMatches(macro: Macro, index: Int, step: Step, event: MacroEvent): Boolean {
         val d = event.data
         return when (step.type) {
-            "time", "interval", "sun" ->
+            "time", "interval", "sun", "date", "calendar", "stopwatch" ->
                 event.type == "alarm" && d["macro"] == macro.id && d["idx"] == index.toString()
 
             "boot" -> event.type == "boot"
@@ -110,6 +116,37 @@ object Conditions {
 
             "webhook" -> event.type == "webhook" && step.p("name").equals(d["name"], ignoreCase = true)
 
+            "weather" -> event.type == "weather" && d["macro"] == macro.id && d["idx"] == index.toString()
+
+            "power_button" -> event.type == "power_button" &&
+                (d["count"]?.toIntOrNull() ?: 0) >= (step.p("presses", "3").toIntOrNull() ?: 3)
+
+            "media_button" -> event.type == "media_button" && step.p("button", "any").let { it == "any" || it == d["state"] }
+
+            "light" -> {
+                if (event.type != "light") return false
+                val lux = d["lux"]?.toDoubleOrNull() ?: return false
+                val prev = d["prev"]?.toDoubleOrNull() ?: return false
+                val n = step.p("lux", "10").toDoubleOrNull() ?: 10.0
+                if (step.p("direction", "below") == "below") prev > n && lux <= n else prev < n && lux >= n
+            }
+
+            "edge_swipe" -> event.type == "edge_swipe" && d["macro"] == macro.id && d["idx"] == index.toString()
+
+            "nfc" -> event.type == "nfc" && step.p("tag").let { it.isBlank() || it.equals(d["tag"], ignoreCase = true) }
+
+            "login_failed" -> event.type == "login_failed" &&
+                (d["count"]?.toIntOrNull() ?: 0) >= (step.p("attempts", "1").toIntOrNull() ?: 1)
+
+            "connection" -> event.type == "connection" && step.p("type", "any").let { it == "any" || it == d["state"] }
+
+            "wifi_in_range" -> event.type == "wifi_in_range" && d["macro"] == macro.id && d["idx"] == index.toString()
+
+            "sms_sent" -> event.type == "sms_sent" && numberMatches(step.p("number"), d["number"] ?: "")
+
+            "clipboard_changed" -> event.type == "clipboard" &&
+                step.p("contains").let { it.isBlank() || (d["clip"] ?: "").contains(it, ignoreCase = true) }
+
             "variable_changed" -> event.type == "variable" &&
                 step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
 
@@ -160,6 +197,29 @@ object Conditions {
         "day_of_month" -> today().dayOfMonth in numberList(step.p("days"))
 
         "month" -> today().monthValue in numberList(step.p("months"))
+
+        "logic_group" -> {
+            val results = step.conditions.map { constraintPasses(ctx, it, vars) }
+            when (step.p("op", "all")) {
+                "any" -> results.any { it }
+                "none" -> results.none { it }
+                "not_all" -> !results.all { it }
+                else -> results.all { it }
+            }
+        }
+
+        "light_level" -> sensorValue("lux")?.let { lux ->
+            val n = step.p("lux", "10").toDoubleOrNull() ?: 10.0
+            if (step.p("direction", "below") == "below") lux < n else lux > n
+        } ?: false
+
+        "proximity_state" -> sensorValue("near")?.let { (it > 0) == (step.p("state", "near") == "near") } ?: false
+
+        "stopwatch_state" -> {
+            val secs = stopwatchSeconds(step.p("name", "timer"))
+            val n = step.p("seconds", "60").toDoubleOrNull() ?: 60.0
+            if (step.p("direction", "above") == "above") secs > n else secs < n
+        }
 
         "ringer_state" -> DeviceState.ringerMode(ctx) == step.p("state", "normal")
 

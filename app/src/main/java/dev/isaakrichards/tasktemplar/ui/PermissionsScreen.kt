@@ -221,9 +221,26 @@ private fun buildPerms(ctx: Context, request: (Array<String>) -> Unit): List<Per
     }
 
     list += Perm(
-        "SMS", "SMS received trigger and Send SMS action.",
-        has(ctx, Manifest.permission.RECEIVE_SMS) && has(ctx, Manifest.permission.SEND_SMS),
-    ) { request(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS)) }
+        "SMS", "SMS received / sent triggers and Send SMS action.",
+        has(ctx, Manifest.permission.RECEIVE_SMS) && has(ctx, Manifest.permission.SEND_SMS) && has(ctx, Manifest.permission.READ_SMS),
+    ) { request(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS)) }
+
+    list += Perm(
+        "Calendar", "Calendar event trigger.",
+        has(ctx, Manifest.permission.READ_CALENDAR),
+    ) { request(arrayOf(Manifest.permission.READ_CALENDAR)) }
+
+    list += Perm(
+        "Device admin", "Failed-unlock trigger. TaskTemplar only watches login attempts and can lock the screen; it can't wipe or change anything.",
+        dev.isaakrichards.tasktemplar.service.AdminReceiver.isActive(ctx),
+    ) {
+        ctx.startActivity(
+            Intent(android.app.admin.DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                .putExtra(android.app.admin.DevicePolicyManager.EXTRA_DEVICE_ADMIN, dev.isaakrichards.tasktemplar.service.AdminReceiver.component(ctx))
+                .putExtra(android.app.admin.DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Lets the “Failed unlock” trigger notice wrong PIN attempts.")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
 
     if (sdk >= 31) {
         list += Perm(

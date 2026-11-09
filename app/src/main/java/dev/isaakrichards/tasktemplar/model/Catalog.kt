@@ -606,6 +606,7 @@ object Catalog {
         "flip" to "face_down", "proximity" to "near", "orientation" to "landscape", "music" to "playing",
         "silent_mode" to "silent", "airplane_changed" to "on", "gps_changed" to "on", "dock" to "docked",
         "usb_device" to "attached", "volume_button" to "up",
+        "daydream" to "started", "vpn" to "on", "hotspot" to "on", "autosync" to "on",
     )
 
     private fun stateTrigger(type: String, cat: String, label: String, desc: String, vararg states: Pair<String, String>) =
@@ -840,9 +841,176 @@ object Catalog {
         ) { "Intent ${it.p("action").ifBlank { it.p("data") }}" },
     )
 
-    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers
-    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints
-    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + logicActions
+    // ---- Stage 6: more triggers ----
+
+    private val moreTriggers6: List<StepSpec> = listOf(
+        StepSpec(
+            "date", T, "Date & time", "Day of month", "Fires on a given day of the month (or the last day) at a set time.",
+            listOf(
+                ParamSpec("day", "Day (1–31 or “last”)", ParamKind.TEXT, "1"),
+                ParamSpec("time", "Time", ParamKind.TIME, "09:00"),
+                ParamSpec("months", "Months", ParamKind.TEXT, "1-12", hint = "e.g. 1-12 or 3, 6, 9, 12"),
+            ),
+        ) { "Day ${it.p("day", "1")} at ${it.p("time", "09:00")}" },
+        StepSpec(
+            "calendar", T, "Date & time", "Calendar event", "Fires at the start or end of events in your phone's calendars. Title is {event_title}.",
+            listOf(
+                ParamSpec("when", "At event", ParamKind.CHOICE, "start", listOf("start" to "Start", "end" to "End")),
+                ParamSpec("title", "Title contains", ParamKind.TEXT, optional = true, hint = "Any event"),
+                ParamSpec("offset", "Offset (minutes, negative = before)", ParamKind.NUMBER, "0"),
+                ParamSpec("all_day", "All-day events", ParamKind.CHOICE, "include", listOf("include" to "Include", "exclude" to "Ignore")),
+            ),
+        ) { s -> "Calendar ${s.p("when", "start")}" + s.p("title").let { if (it.isBlank()) "" else " “$it”" } },
+        StepSpec(
+            "stopwatch", T, "Date & time", "Stopwatch / countdown", "Fires when a named stopwatch (started by the Stopwatch action) reaches a time.",
+            listOf(
+                ParamSpec("name", "Stopwatch name", ParamKind.TEXT, "timer"),
+                ParamSpec("seconds", "Reaches (seconds)", ParamKind.NUMBER, "60"),
+            ),
+        ) { "Stopwatch ${it.p("name", "timer")} hits ${it.p("seconds", "60")}s" },
+        StepSpec(
+            "weather", T, "Location", "Weather", "Checks the weather (Open-Meteo, free, no account) and fires when a condition becomes true.",
+            listOf(
+                ParamSpec(
+                    "condition", "When", ParamKind.CHOICE, "rain",
+                    listOf(
+                        "rain" to "It starts raining", "snow" to "It starts snowing", "clear" to "It clears up",
+                        "temp_above" to "Temperature above", "temp_below" to "Temperature below",
+                        "wind_above" to "Wind above", "humidity_above" to "Humidity above (%)",
+                    ),
+                ),
+                ParamSpec("value", "Value (for above / below)", ParamKind.NUMBER, "90"),
+                ParamSpec("unit", "Units", ParamKind.CHOICE, "fahrenheit", listOf("fahrenheit" to "°F, mph", "celsius" to "°C, km/h")),
+                ParamSpec("location", "Place (blank = last known)", ParamKind.LOCATION, optional = true),
+                ParamSpec("every", "Check every (minutes)", ParamKind.NUMBER, "30"),
+            ),
+        ) { "Weather: ${it.p("condition", "rain").replace('_', ' ')}" },
+        StepSpec(
+            "power_button", T, "Device", "Power button presses", "Fires when the power button is pressed several times quickly.",
+            listOf(
+                ParamSpec("presses", "Presses", ParamKind.NUMBER, "3"),
+                ParamSpec("window", "Within (seconds)", ParamKind.NUMBER, "3"),
+            ),
+        ) { "Power ×${it.p("presses", "3")}" },
+        StepSpec(
+            "media_button", T, "Volume & sound", "Media / headset button", "Fires on headset or media keys while the screen is on. Needs Accessibility.",
+            listOf(
+                ParamSpec(
+                    "button", "Button", ParamKind.CHOICE, "any",
+                    listOf("any" to "Any", "play_pause" to "Play / pause / headset", "next" to "Next", "previous" to "Previous"),
+                ),
+            ),
+        ) { "Media button ${it.p("button", "any").replace('_', '/')}" },
+        StepSpec(
+            "light", T, "Sensors", "Light level", "Fires when ambient light crosses a level (lux).",
+            listOf(
+                ParamSpec("direction", "Fire when it", ParamKind.CHOICE, "below", listOf("below" to "Gets darker than", "above" to "Gets brighter than")),
+                ParamSpec("lux", "Lux", ParamKind.NUMBER, "10"),
+            ),
+        ) { "Light ${it.p("direction", "below")} ${it.p("lux", "10")} lux" },
+        StepSpec(
+            "edge_swipe", T, "Launchers", "Edge swipe", "Swipe in from a screen edge. Adds a thin invisible strip. Needs “Display over other apps”.",
+            listOf(
+                ParamSpec("edge", "Edge", ParamKind.CHOICE, "right", listOf("left" to "Left", "right" to "Right")),
+                ParamSpec("position", "Strip position", ParamKind.CHOICE, "middle", listOf("top" to "Upper", "middle" to "Middle", "bottom" to "Lower")),
+            ),
+        ) { "Swipe in from ${it.p("edge", "right")}" },
+        StepSpec(
+            "nfc", T, "Connectivity", "NFC tag", "Fires when an NFC tag is scanned (screen unlocked). Tag id is {tag}.",
+            listOf(ParamSpec("tag", "Tag id", ParamKind.TEXT, optional = true, hint = "Any tag. Scan once, copy the id from the log")),
+        ) { s -> "NFC tag" + s.p("tag").let { if (it.isBlank()) "" else " $it" } },
+        StepSpec(
+            "login_failed", T, "Device", "Failed unlock", "Fires after wrong PIN / pattern attempts. Needs Device admin (Permissions screen).",
+            listOf(ParamSpec("attempts", "After attempts", ParamKind.NUMBER, "1")),
+        ) { "Failed unlock ×${it.p("attempts", "1")}" },
+        StepSpec(
+            "connection", T, "Connectivity", "Data connection changed", "Fires when the active connection switches (Wi-Fi, mobile, ethernet, none).",
+            listOf(
+                ParamSpec(
+                    "type", "To", ParamKind.CHOICE, "any",
+                    listOf("any" to "Any change", "wifi" to "Wi-Fi", "mobile" to "Mobile data", "ethernet" to "Ethernet", "none" to "No connection"),
+                ),
+            ),
+        ) { "Connection → ${it.p("type", "any")}" },
+        StepSpec(
+            "wifi_in_range", T, "Connectivity", "Wi-Fi network in range", "Fires when a network shows up (or disappears) in Wi-Fi scans. Needs location.",
+            listOf(
+                ParamSpec("ssid", "Network name", ParamKind.TEXT),
+                ParamSpec("state", "When", ParamKind.CHOICE, "appears", listOf("appears" to "Comes in range", "disappears" to "Goes out of range")),
+            ),
+        ) { "“${it.p("ssid")}” ${it.p("state", "appears")}" },
+        StepSpec(
+            "sms_sent", T, "Phone & SMS", "SMS sent", "Fires after you send a text. Number is {number}, message {text}. Needs SMS permission.",
+            listOf(ParamSpec("number", "To number", ParamKind.TEXT, optional = true, hint = "Anyone")),
+        ) { s -> "SMS sent" + s.p("number").let { if (it.isBlank()) "" else " to $it" } },
+        StepSpec(
+            "clipboard_changed", T, "Device", "Clipboard changed", "Fires when the clipboard changes. Android 10+ only reports this while TaskTemplar is open, or if it's your keyboard.",
+            listOf(ParamSpec("contains", "Text contains", ParamKind.TEXT, optional = true)),
+        ) { "Clipboard changed" },
+        stateTrigger("daydream", "Device", "Screensaver", "Fires when the screensaver (daydream) starts or stops.", "started" to "Started", "stopped" to "Stopped"),
+        stateTrigger("vpn", "Connectivity", "VPN", "Fires when a VPN connects or disconnects.", "on" to "Connected", "off" to "Disconnected"),
+        stateTrigger("hotspot", "Connectivity", "Hotspot", "Fires when the Wi-Fi hotspot is switched.", *onOffStates),
+        stateTrigger("autosync", "Device", "Auto-sync", "Fires when account auto-sync is switched.", *onOffStates),
+    )
+
+    private val moreConstraints6: List<StepSpec> = listOf(
+        StepSpec(
+            "logic_group", C, "Logic", "Logic group (AND / OR / NOT)", "Combines its own conditions: all, any, none, or not all.",
+            listOf(
+                ParamSpec(
+                    "op", "Passes when", ParamKind.CHOICE, "all",
+                    listOf("all" to "ALL pass (AND)", "any" to "ANY passes (OR)", "none" to "NONE pass (NOT OR)", "not_all" to "NOT all pass (NAND)"),
+                ),
+            ),
+            conditions = true,
+        ) { s -> "${s.p("op", "all").uppercase().replace('_', ' ')} of (${s.conditions.joinToString("; ") { summarize(it) }})" },
+        StepSpec(
+            "light_level", C, "Sensors", "Light level", "Compares ambient light (lux).",
+            listOf(
+                ParamSpec("direction", "Light is", ParamKind.CHOICE, "below", listOf("below" to "Darker than", "above" to "Brighter than")),
+                ParamSpec("lux", "Lux", ParamKind.NUMBER, "10"),
+            ),
+        ) { "Light ${it.p("direction", "below")} ${it.p("lux", "10")} lux" },
+        StepSpec(
+            "proximity_state", C, "Sensors", "Proximity", "Checks if the proximity sensor is covered.",
+            listOf(ParamSpec("state", "Sensor is", ParamKind.CHOICE, "near", listOf("near" to "Covered", "far" to "Uncovered"))),
+        ) { "Proximity ${it.p("state", "near")}" },
+        StepSpec(
+            "stopwatch_state", C, "Date & time", "Stopwatch value", "Compares a named stopwatch's seconds.",
+            listOf(
+                ParamSpec("name", "Stopwatch name", ParamKind.TEXT, "timer"),
+                ParamSpec("direction", "Is", ParamKind.CHOICE, "above", listOf("above" to "More than", "below" to "Less than")),
+                ParamSpec("seconds", "Seconds", ParamKind.NUMBER, "60"),
+            ),
+        ) { "Stopwatch ${it.p("name", "timer")} ${it.p("direction", "above")} ${it.p("seconds", "60")}s" },
+        stateConstraint("hotspot", "Connectivity", "Hotspot", "Hotspot on", "Hotspot off"),
+        stateConstraint("vpn", "Connectivity", "VPN", "VPN connected", "No VPN"),
+        stateConstraint("autosync", "Device", "Auto-sync", "Auto-sync on", "Auto-sync off"),
+    )
+
+    private val moreActions6: List<StepSpec> = listOf(
+        StepSpec(
+            "stopwatch_op", A, "Date & time", "Stopwatch", "Starts, pauses or resets a named stopwatch. Read it with {sw=name} (seconds).",
+            listOf(
+                ParamSpec("name", "Stopwatch name", ParamKind.TEXT, "timer"),
+                ParamSpec(
+                    "op", "Do", ParamKind.CHOICE, "start",
+                    listOf("start" to "Start / resume", "pause" to "Pause", "reset" to "Reset to 0", "restart" to "Restart from 0", "stop" to "Stop and clear"),
+                ),
+            ),
+        ) { "Stopwatch ${it.p("name", "timer")}: ${it.p("op", "start")}" },
+        StepSpec(
+            "get_weather", A, "Location", "Get weather", "Looks up current weather (Open-Meteo). Sets {temp}, {humidity}, {wind}, {precip}, {weather}.",
+            listOf(
+                ParamSpec("location", "Place (blank = current location)", ParamKind.LOCATION, optional = true),
+                ParamSpec("unit", "Units", ParamKind.CHOICE, "fahrenheit", listOf("fahrenheit" to "°F, mph", "celsius" to "°C, km/h")),
+            ),
+        ) { "Get weather" },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers + moreTriggers6
+    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints + moreConstraints6
+    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + moreActions6 + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")
