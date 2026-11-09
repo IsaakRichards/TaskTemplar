@@ -4,21 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- orbit ring -->
-    <path
-        android:strokeColor="#7FD8FF"
-        android:strokeWidth="2.5"
-        android:fillColor="#00000000"
-        android:pathData="M54,30 A24,24 0 1,1 53.99,30 Z" />
-    <!-- lightning bolt -->
-    <path
-        android:fillColor="#B69CFF"
-        android:pathData="M58,32 L40,57 L52,57 L48,76 L68,49 L56,49 Z" />
-    <!-- stars -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M76,34 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M33,72 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" />
+    <!-- Android robot (CC BY 3.0, Google) wearing the Templar cross pattée -->
+    <path android:fillColor="#FF111111" android:pathData="M38,44 A16,16 0 0,1 70,44 Z" />
+    <path android:fillColor="#FF111111" android:pathData="M38,46 H70 V68 A4,4 0 0,1 66,72 H42 A4,4 0 0,1 38,68 Z" />
+    <path android:fillColor="#FF111111" android:pathData="M33.5,47 A2.5,2.5 0 0,1 36,49.5 V61.5 A2.5,2.5 0 0,1 31,61.5 V49.5 A2.5,2.5 0 0,1 33.5,47 Z" />
+    <path android:fillColor="#FF111111" android:pathData="M74.5,47 A2.5,2.5 0 0,1 77,49.5 V61.5 A2.5,2.5 0 0,1 72,61.5 V49.5 A2.5,2.5 0 0,1 74.5,47 Z" />
+    <path android:fillColor="#FF111111" android:pathData="M44,71 H49.5 V78.5 A2.75,2.75 0 0,1 44,78.5 Z" />
+    <path android:fillColor="#FF111111" android:pathData="M58.5,71 H64 V78.5 A2.75,2.75 0 0,1 58.5,78.5 Z" />
+    <path android:strokeColor="#FF111111" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M45.5,31 L41.5,24.5" />
+    <path android:strokeColor="#FF111111" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M62.5,31 L66.5,24.5" />
+    <path android:fillColor="#FFEFE6D2" android:pathData="M45.8,37.5 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0" />
+    <path android:fillColor="#FFEFE6D2" android:pathData="M58.8,37.5 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0" />
+    <path android:fillColor="#FFC8102E" android:pathData="M52.5,57.5 L50.2,50.8 L57.8,50.8 L55.5,57.5 L62.2,55.2 L62.2,62.8 L55.5,60.5 L57.8,67.2 L50.2,67.2 L52.5,60.5 L45.8,62.8 L45.8,55.2 Z" />
 </vector>

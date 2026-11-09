@@ -1,4 +1,6 @@
-# TaskTemplar
+<p align="center"><img src="docs/logo.png" width="140" alt="TaskTemplar logo"></p>
+
+<h1 align="center">TaskTemplar</h1>
 
 An ad-free, tracker-free automation app for Android in the spirit of MacroDroid.
 Build **macros** out of three parts:
@@ -11,6 +13,17 @@ No ads, no analytics, no accounts, no network calls except the HTTP actions you 
 Parity progress against MacroDroid is tracked in [PARITY.md](PARITY.md).
 
 Macros live in a JSON file on the phone and can be exported or imported from the ⋮ menu.
+
+
+## Screenshots
+
+| Macros | If / Else editor | Actions |
+|---|---|---|
+| <img src="docs/screenshots/01-macros.png" width="250"> | <img src="docs/screenshots/02-editor-logic.png" width="250"> | <img src="docs/screenshots/04-editor-actions.png" width="250"> |
+| **Add action** | **Step settings** | **Templates** |
+| <img src="docs/screenshots/03-add-action.png" width="250"> | <img src="docs/screenshots/05-step-settings.png" width="250"> | <img src="docs/screenshots/09-templates.png" width="250"> |
+| **Global variables** | **Permissions** | **Run log** |
+| <img src="docs/screenshots/07-variables.png" width="250"> | <img src="docs/screenshots/08-permissions.png" width="250"> | <img src="docs/screenshots/06-run-log.png" width="250"> |
 
 ## What's in v0.1
 
@@ -122,3 +135,9 @@ On some phones (Samsung, Xiaomi and others) you may also need to set the app to
 
 Kotlin 2.0 · Jetpack Compose (Material 3) · minSdk 26 (Android 8) · targetSdk 34 · no third-party deps
 beyond AndroidX and coroutines.
+
+## Credits
+
+The Android robot is reproduced or modified from work created and shared by Google and used according
+to terms described in the Creative Commons 3.0 Attribution License. The cross pattée is a historical
+public-domain emblem.

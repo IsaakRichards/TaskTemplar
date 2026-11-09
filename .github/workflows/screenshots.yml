@@ -2,17 +2,12 @@ name: Screenshots
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - tools/screenshots.py
-      - .github/workflows/screenshots.yml
 
 jobs:
   screenshots:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +43,3 @@ jobs:
         with:
           name: screenshots
           path: shots/*.png
-
-      - name: Publish to the screenshots branch
-        run: |
-          cd shots
-          git init -q -b screenshots
-          git add -A
-          git -c user.name="TaskTemplar CI" -c user.email="ci@users.noreply.github.com" commit -qm "Screenshots for ${GITHUB_SHA::7}"
-          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" screenshots
