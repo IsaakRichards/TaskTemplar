@@ -28,7 +28,7 @@ jobs:
       - name: Build release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace
+          ./gradlew testDebugUnitTest assembleRelease --stacktrace
 
       - name: Rename APK
         run: |

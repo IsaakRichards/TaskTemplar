@@ -327,6 +327,12 @@ object MacroEngine {
             "trigger" to event.type,
             "time" to LocalTime.now().format(timeFmt),
             "date" to LocalDate.now().toString(),
+            "hour" to LocalTime.now().hour.toString(),
+            "minute" to "%02d".format(LocalTime.now().minute),
+            "day" to LocalDate.now().dayOfMonth.toString(),
+            "month" to LocalDate.now().monthValue.toString(),
+            "year" to LocalDate.now().year.toString(),
+            "weekday" to LocalDate.now().dayOfWeek.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.getDefault()),
             "battery" to DeviceState.batteryLevel(ctx).toString(),
             "ssid" to DeviceState.currentSsid(ctx),
         )

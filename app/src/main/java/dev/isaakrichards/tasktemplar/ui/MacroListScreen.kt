@@ -51,7 +51,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.verticalScroll
 import dev.isaakrichards.tasktemplar.data.MacroStore
+import dev.isaakrichards.tasktemplar.importers.ImportCommon
+import dev.isaakrichards.tasktemplar.importers.MacroDroidImporter
+import dev.isaakrichards.tasktemplar.importers.TaskerImporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.isaakrichards.tasktemplar.engine.MacroEngine
 import dev.isaakrichards.tasktemplar.model.Catalog
 import dev.isaakrichards.tasktemplar.model.Macro
@@ -68,6 +75,36 @@ fun MacroListScreen(
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
     var templates by remember { mutableStateOf(false) }
+    var report by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val foreignImporter = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            report = withContext(Dispatchers.Default) {
+                runCatching {
+                    val text = ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } ?: ""
+                    val result = when {
+                        TaskerImporter.looksLike(text) -> TaskerImporter.parse(text)
+                        MacroDroidImporter.looksLike(text) -> MacroDroidImporter.parse(text)
+                        else -> error("That doesn't look like a MacroDroid (.macro / .mdr) or Tasker (.xml) export")
+                    }
+                    val notes = result.notes.toMutableList()
+                    val existing = MacroStore.macros.value
+                    val resolved = ImportCommon.resolve(result.macros, existing, notes)
+                    MacroStore.replaceAll(existing + resolved)
+                    MacroStore.log("Import", "Imported ${resolved.size} macro(s) from ${result.source}")
+                    buildString {
+                        append("Imported ${resolved.size} macro(s) from ${result.source}. ")
+                        append("They're switched off so nothing runs until you've checked them; look in the “Imported” category.")
+                        if (notes.isNotEmpty()) {
+                            append("\n\nNeeds a look (${notes.size}):\n")
+                            notes.forEach { append("• ").append(it).append('\n') }
+                        }
+                    }
+                }.getOrElse { "Import failed: ${it.message}" }
+            }
+        }
+    }
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -98,6 +135,10 @@ fun MacroListScreen(
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("Import from MacroDroid / Tasker") }, onClick = {
+                                menu = false
+                                foreignImporter.launch(arrayOf("*/*"))
+                            })
                             DropdownMenuItem(text = { Text("New from template") }, onClick = {
                                 menu = false
                                 templates = true
@@ -129,6 +170,19 @@ fun MacroListScreen(
             )
         },
     ) { pad ->
+        report?.let { r ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { report = null },
+                title = { Text("Import") },
+                text = {
+                    Text(
+                        r,
+                        modifier = Modifier.heightIn(max = 460.dp).verticalScroll(androidx.compose.foundation.rememberScrollState()),
+                    )
+                },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = { report = null }) { Text("OK") } },
+            )
+        }
         if (templates) {
             TemplateDialog(
                 onDismiss = { templates = false },

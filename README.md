@@ -94,6 +94,14 @@ Back up macros. Plus macro **categories**, a local **template library** (⋮ →
 **Media & plugins (v0.9)**: silent Take photo and Record microphone actions (`{photo_path}`, `{audio_path}`),
 a host for **Tasker / Locale action plugins** (AutoTools, AutoInput, Join…), and LED-blinking notifications.
 
+**Import from MacroDroid & Tasker (v0.10)**: ⋮ → *Import from MacroDroid / Tasker* reads MacroDroid exports
+(`.macro`, `.mdr`, `.category`) and Tasker exports (profile, task or project `.xml`, or a full backup).
+Around 50 MacroDroid triggers, 35 constraints and 70 actions convert directly, including If / Else / loops,
+variables and `[v=name]`-style magic text. Tasker profiles become macros (exit tasks become a second macro),
+with Time / Day / App / Location / Event / State contexts, ~60 actions, If / Else / For, conditional actions,
+`%VARIABLES` and Locale plugin actions carried over. Imported macros arrive **switched off** in an “Imported”
+category, and a report lists anything that needs a manual touch.
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),
