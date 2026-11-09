@@ -31,6 +31,10 @@
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
     <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
@@ -61,6 +65,12 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="com.twofortyfouram.locale.intent.action.EDIT_SETTING" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.RINGTONE_PICKER" />
         </intent>
     </queries>
 
@@ -107,6 +117,13 @@
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="standard"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TaskTemplar.Translucent" />
+
+        <activity
+            android:name=".ui.CaptureActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
             android:taskAffinity=""
             android:theme="@style/Theme.TaskTemplar.Translucent" />
 

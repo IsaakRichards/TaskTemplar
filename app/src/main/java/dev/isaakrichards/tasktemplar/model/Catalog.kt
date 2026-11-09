@@ -6,7 +6,7 @@ enum class StepKind(val title: String) {
     ACTION("Action"),
 }
 
-enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO, LOCATION, SOUND }
+enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO, LOCATION, SOUND, PLUGIN }
 
 data class ParamSpec(
     val key: String,
@@ -180,6 +180,7 @@ object Catalog {
             listOf(
                 ParamSpec("title", "Title", ParamKind.TEXT, "TaskTemplar", hint = MAGIC),
                 ParamSpec("text", "Text", ParamKind.TEXT, "Macro fired at {time}", hint = MAGIC),
+                ParamSpec("led", "Notification light", ParamKind.CHOICE, "no", listOf("no" to "Normal", "yes" to "Blink the LED (phones that have one)")),
             ),
         ) { "\"${it.p("title")}\"" },
         StepSpec(
@@ -1168,9 +1169,29 @@ object Catalog {
         ) { "Backup → ${it.p("path", "backup-{date}.json")}" },
     )
 
+    // ---- Stage 8 ----
+
+    /** Turns a plugin config into a summary; replaced at app start. */
+    var pluginSummary: (String) -> String = { "Plugin" }
+
+    private val moreActions8: List<StepSpec> = listOf(
+        StepSpec(
+            "take_photo", A, "Media", "Take photo", "Silently takes a photo into Pictures/TaskTemplar. Path goes to {photo_path}. Needs Camera (and “Display over other apps” in the background).",
+            listOf(ParamSpec("camera", "Camera", ParamKind.CHOICE, "back", listOf("back" to "Back", "front" to "Front (selfie)"))),
+        ) { "Photo (${it.p("camera", "back")})" },
+        StepSpec(
+            "record_audio", A, "Media", "Record microphone", "Records audio into Music/TaskTemplar and waits. Path goes to {audio_path}. Needs Microphone.",
+            listOf(ParamSpec("seconds", "Seconds", ParamKind.NUMBER, "10")),
+        ) { "Record ${it.p("seconds", "10")}s" },
+        StepSpec(
+            "locale_plugin", A, "Advanced", "Tasker / Locale plugin", "Runs an installed Locale-compatible plugin (AutoTools, AutoInput, Join…). Text values accept magic text.",
+            listOf(ParamSpec("config", "Plugin", ParamKind.PLUGIN)),
+        ) { pluginSummary(it.p("config")) },
+    )
+
     val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers + moreTriggers6 + moreTriggers7
     val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints + moreConstraints6 + moreConstraints7
-    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + moreActions6 + moreActions7 + logicActions
+    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + moreActions6 + moreActions7 + moreActions8 + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

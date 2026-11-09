@@ -8,6 +8,7 @@ import dev.isaakrichards.tasktemplar.data.MacroStore
 import android.telephony.TelephonyManager
 import dev.isaakrichards.tasktemplar.engine.Conditions
 import dev.isaakrichards.tasktemplar.engine.Geo
+import dev.isaakrichards.tasktemplar.engine.LocalePlugins
 import dev.isaakrichards.tasktemplar.engine.MagicText
 import dev.isaakrichards.tasktemplar.engine.Stopwatches
 import dev.isaakrichards.tasktemplar.service.SensorWatch
@@ -58,11 +59,20 @@ class TemplarApp : Application() {
                 description = "Notifications posted by your macros"
             },
         )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_LED, "Macro notifications (LED)", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Notifications that blink the notification light, on phones that have one"
+                enableLights(true)
+                lightColor = 0xFFB69CFF.toInt()
+            },
+        )
+        Catalog.pluginSummary = { LocalePlugins.describe(it) }
         Actions.watchTorch(this)
     }
 
     companion object {
         const val CHANNEL_SERVICE = "engine"
         const val CHANNEL_ALERTS = "alerts"
+        const val CHANNEL_LED = "alerts_led"
     }
 }

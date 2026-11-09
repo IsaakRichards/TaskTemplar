@@ -237,6 +237,21 @@ object MacroEngine {
                 }
             }
 
+            "take_photo" -> {
+                val path = dev.isaakrichards.tasktemplar.ui.CaptureActivity.capture(ctx, "photo", front = step.p("camera", "back") == "front")
+                vars["photo_path"] = path
+                path
+            }
+
+            "record_audio" -> {
+                val secs = t("seconds", "10").toLongOrNull() ?: 10L
+                val path = dev.isaakrichards.tasktemplar.ui.CaptureActivity.capture(ctx, "audio", seconds = secs)
+                vars["audio_path"] = path
+                path
+            }
+
+            "locale_plugin" -> LocalePlugins.fire(ctx, step.p("config"), vars)
+
             "list_op" -> Collections.listOp(step, vars)
 
             "dict_op" -> Collections.dictOp(step, vars)

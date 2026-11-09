@@ -231,6 +231,11 @@ private fun buildPerms(ctx: Context, request: (Array<String>) -> Unit): List<Per
     ) { request(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }
 
     list += Perm(
+        "Camera & microphone", "Take photo and Record microphone actions.",
+        has(ctx, Manifest.permission.CAMERA) && has(ctx, Manifest.permission.RECORD_AUDIO),
+    ) { request(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)) }
+
+    list += Perm(
         "Call log", "Clear call log action.",
         has(ctx, Manifest.permission.WRITE_CALL_LOG),
     ) { request(arrayOf(Manifest.permission.WRITE_CALL_LOG)) }

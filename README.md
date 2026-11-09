@@ -78,6 +78,9 @@ delete / open / upload), UDP packets, clear call log, add calendar event, say th
 Back up macros. Plus macro **categories**, a local **template library** (⋮ → New from template) and
 **saved places** (★ next to any location field).
 
+**Media & plugins (v0.9)**: silent Take photo and Record microphone actions (`{photo_path}`, `{audio_path}`),
+a host for **Tasker / Locale action plugins** (AutoTools, AutoInput, Join…), and LED-blinking notifications.
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

@@ -76,7 +76,8 @@ object Actions {
                     ctx, 0, Intent(ctx, MainActivity::class.java),
                     PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
                 )
-                val n = NotificationCompat.Builder(ctx, TemplarApp.CHANNEL_ALERTS)
+                val led = step.p("led", "no") == "yes"
+                val n = NotificationCompat.Builder(ctx, if (led) TemplarApp.CHANNEL_LED else TemplarApp.CHANNEL_ALERTS)
                     .setSmallIcon(R.drawable.ic_stat)
                     .setContentTitle(t("title", "TaskTemplar"))
                     .setContentText(t("text"))

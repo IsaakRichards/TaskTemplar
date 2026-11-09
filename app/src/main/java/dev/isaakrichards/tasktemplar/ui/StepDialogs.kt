@@ -36,6 +36,7 @@ import dev.isaakrichards.tasktemplar.data.MacroStore
 import dev.isaakrichards.tasktemplar.data.Places
 import dev.isaakrichards.tasktemplar.engine.Geo
 import dev.isaakrichards.tasktemplar.engine.GeoMath
+import dev.isaakrichards.tasktemplar.engine.LocalePlugins
 import kotlinx.coroutines.launch
 import dev.isaakrichards.tasktemplar.model.Macro
 import androidx.compose.material3.AlertDialog
@@ -288,6 +289,59 @@ private fun ParamField(
         ParamKind.MACRO -> OutlinedButton(onClick = onPickMacro, modifier = Modifier.fillMaxWidth()) {
             val name = if (value.isBlank()) (spec.hint.ifBlank { "Choose…" }) else Catalog.macroName(value)
             Text("$label: $name")
+        }
+
+        ParamKind.PLUGIN -> {
+            var choosing by remember { mutableStateOf(false) }
+            var chosen by remember { mutableStateOf<LocalePlugins.Plugin?>(null) }
+            val editor = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+                val p = chosen ?: return@rememberLauncherForActivityResult
+                val data = res.data ?: return@rememberLauncherForActivityResult
+                val cfg = org.json.JSONObject()
+                    .put("pkg", p.pkg).put("activity", p.activity).put("label", p.label)
+                    .put("blurb", data.getStringExtra(LocalePlugins.EXTRA_BLURB) ?: "")
+                    .put("bundle", LocalePlugins.bundleToJson(data.getBundleExtra(LocalePlugins.EXTRA_BUNDLE)))
+                onChange(cfg.toString())
+            }
+            OutlinedButton(onClick = { choosing = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (value.isBlank()) "Choose plugin…" else LocalePlugins.describe(value))
+            }
+            if (choosing) {
+                val plugins = remember { LocalePlugins.installed(ctx) }
+                AlertDialog(
+                    onDismissRequest = { choosing = false },
+                    title = { Text("Locale / Tasker plugins") },
+                    confirmButton = {},
+                    dismissButton = { TextButton(onClick = { choosing = false }) { Text("Cancel") } },
+                    text = {
+                        Column {
+                            if (plugins.isEmpty()) Text("No compatible plugins installed.")
+                            plugins.forEach { p ->
+                                Text(
+                                    p.label,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        choosing = false
+                                        chosen = p
+                                        val intent = android.content.Intent(LocalePlugins.ACTION_EDIT)
+                                            .setClassName(p.pkg, p.activity)
+                                        // Re-open with the current settings when editing the same plugin.
+                                        runCatching { org.json.JSONObject(value) }.getOrNull()?.let { old ->
+                                            if (old.optString("pkg") == p.pkg) {
+                                                old.optJSONObject("bundle")?.let {
+                                                    intent.putExtra(LocalePlugins.EXTRA_BUNDLE, LocalePlugins.jsonToBundle(it, emptyMap()))
+                                                }
+                                                intent.putExtra(LocalePlugins.EXTRA_BLURB, old.optString("blurb"))
+                                            }
+                                        }
+                                        runCatching { editor.launch(intent) }
+                                    }.padding(vertical = 10.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         }
 
         ParamKind.SOUND -> {
