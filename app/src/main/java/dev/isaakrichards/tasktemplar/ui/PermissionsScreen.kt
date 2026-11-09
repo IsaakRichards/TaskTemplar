@@ -226,9 +226,21 @@ private fun buildPerms(ctx: Context, request: (Array<String>) -> Unit): List<Per
     ) { request(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS, Manifest.permission.READ_SMS)) }
 
     list += Perm(
-        "Calendar", "Calendar event trigger.",
-        has(ctx, Manifest.permission.READ_CALENDAR),
-    ) { request(arrayOf(Manifest.permission.READ_CALENDAR)) }
+        "Calendar", "Calendar event trigger and Add calendar event action.",
+        has(ctx, Manifest.permission.READ_CALENDAR) && has(ctx, Manifest.permission.WRITE_CALENDAR),
+    ) { request(arrayOf(Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR)) }
+
+    list += Perm(
+        "Call log", "Clear call log action.",
+        has(ctx, Manifest.permission.WRITE_CALL_LOG),
+    ) { request(arrayOf(Manifest.permission.WRITE_CALL_LOG)) }
+
+    if (sdk >= 30) {
+        list += Perm(
+            "All files access", "Optional: lets file actions use any /sdcard path. Without it they use Download/TaskTemplar.",
+            android.os.Environment.isExternalStorageManager(),
+        ) { openSettings(ctx, Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, true) }
+    }
 
     list += Perm(
         "Device admin", "Failed-unlock trigger. TaskTemplar only watches login attempts and can lock the screen; it can't wipe or change anything.",

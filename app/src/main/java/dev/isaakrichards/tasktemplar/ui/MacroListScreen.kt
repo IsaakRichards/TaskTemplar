@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -65,6 +67,7 @@ fun MacroListScreen(
 ) {
     val ctx = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    var templates by remember { mutableStateOf(false) }
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -95,6 +98,10 @@ fun MacroListScreen(
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text("New from template") }, onClick = {
+                                menu = false
+                                templates = true
+                            })
                             DropdownMenuItem(text = { Text("Global variables") }, onClick = {
                                 menu = false
                                 onVars()
@@ -122,6 +129,17 @@ fun MacroListScreen(
             )
         },
     ) { pad ->
+        if (templates) {
+            TemplateDialog(
+                onDismiss = { templates = false },
+                onPick = { t ->
+                    templates = false
+                    val copy = t.copy(id = java.util.UUID.randomUUID().toString())
+                    MacroStore.upsert(copy)
+                    onOpen(copy.id)
+                },
+            )
+        }
         if (macros.isEmpty()) {
             Box(
                 Modifier.fillMaxSize().padding(pad).padding(32.dp),
@@ -147,7 +165,19 @@ fun MacroListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(macros, key = { it.id }) { m ->
+                val groups = macros.groupBy { it.category.trim() }.toSortedMap(compareBy<String> { it.isEmpty() }.thenBy { it.lowercase() })
+                groups.forEach { (category, list) ->
+                    if (groups.size > 1 || category.isNotEmpty()) {
+                        item(key = "cat_$category") {
+                            Text(
+                                category.ifEmpty { "Uncategorised" }.uppercase(),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                            )
+                        }
+                    }
+                items(list, key = { it.id }) { m ->
                     MacroCard(
                         macro = m,
                         onClick = { onOpen(m.id) },
@@ -158,10 +188,39 @@ fun MacroListScreen(
                         },
                     )
                 }
+                }
             }
         }
     }
 }
+
+@Composable
+private fun TemplateDialog(onPick: (Macro) -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("New from template") },
+        confirmButton = {},
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = {
+            LazyColumn(Modifier.androidxHeight()) {
+                items(dev.isaakrichards.tasktemplar.model.Templates.all) { (desc, macro) ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .androidxClick { onPick(macro) }
+                            .padding(vertical = 10.dp),
+                    ) {
+                        Text(macro.name, style = MaterialTheme.typography.titleSmall)
+                        Text(desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        },
+    )
+}
+
+private fun Modifier.androidxHeight() = this.then(Modifier.heightIn(max = 460.dp))
+private fun Modifier.androidxClick(onClick: () -> Unit) = this.then(Modifier.clickable(onClick = onClick))
 
 @Composable
 private fun MacroCard(macro: Macro, onClick: () -> Unit, onToggle: (Boolean) -> Unit, onRun: () -> Unit) {

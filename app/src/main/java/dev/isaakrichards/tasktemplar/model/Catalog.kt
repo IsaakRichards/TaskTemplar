@@ -6,7 +6,7 @@ enum class StepKind(val title: String) {
     ACTION("Action"),
 }
 
-enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO, LOCATION }
+enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO, LOCATION, SOUND }
 
 data class ParamSpec(
     val key: String,
@@ -403,8 +403,12 @@ object Catalog {
             listOf(
                 ParamSpec("macro", "Macro", ParamKind.MACRO),
                 ParamSpec("check", "Constraints", ParamKind.CHOICE, "ignore", listOf("ignore" to "Ignore its constraints", "check" to "Only run if its constraints pass")),
+                ParamSpec(
+                    "mode", "How", ParamKind.CHOICE, "separate",
+                    listOf("separate" to "Start it separately", "inline" to "Run here as an action block (wait, share local variables)"),
+                ),
             ),
-        ) { "Run “${macroName(it.p("macro"))}”" },
+        ) { (if (it.p("mode", "separate") == "inline") "Block “" else "Run “") + "${macroName(it.p("macro"))}”" },
         StepSpec(
             "macro_enable", A, "Macros", "Enable / disable macro", "Switches a macro on or off.",
             listOf(
@@ -606,7 +610,7 @@ object Catalog {
         "flip" to "face_down", "proximity" to "near", "orientation" to "landscape", "music" to "playing",
         "silent_mode" to "silent", "airplane_changed" to "on", "gps_changed" to "on", "dock" to "docked",
         "usb_device" to "attached", "volume_button" to "up",
-        "daydream" to "started", "vpn" to "on", "hotspot" to "on", "autosync" to "on",
+        "daydream" to "started", "vpn" to "on", "hotspot" to "on", "autosync" to "on", "signal" to "on",
     )
 
     private fun stateTrigger(type: String, cat: String, label: String, desc: String, vararg states: Pair<String, String>) =
@@ -1008,9 +1012,165 @@ object Catalog {
         ) { "Get weather" },
     )
 
-    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers + moreTriggers6
-    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints + moreConstraints6
-    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + moreActions6 + logicActions
+    // ---- Stage 7 ----
+
+    private val fileHint = "Relative = Download/TaskTemplar/…, or a full /sdcard/… path"
+
+    private val moreTriggers7: List<StepSpec> = listOf(
+        stateTrigger("signal", "Phone & SMS", "Mobile signal", "Fires when the phone gains or loses mobile service.", "on" to "Signal found", "off" to "Signal lost"),
+        StepSpec(
+            "cell_tower", T, "Location", "Cell tower", "Fires when you connect to (or leave) listed cell towers: battery-friendly location. Ids appear in the log while used. Needs location.",
+            listOf(
+                ParamSpec("state", "When", ParamKind.CHOICE, "enter", listOf("enter" to "Connecting to one of them", "exit" to "Leaving them all")),
+                ParamSpec("ids", "Cell ids (comma separated)", ParamKind.TEXT),
+            ),
+        ) { "Cell ${it.p("state", "enter")}: ${it.p("ids")}" },
+    )
+
+    private val moreConstraints7: List<StepSpec> = listOf(
+        stateConstraint("signal", "Phone & SMS", "Mobile signal", "Has signal", "No signal"),
+    )
+
+    private val moreActions7: List<StepSpec> = listOf(
+        StepSpec(
+            "list_op", A, "Variables", "Array variable", "Adds, removes, sorts or splits items. Read with {v=name[0]}, count with {v=name[#]}.",
+            listOf(
+                scopeChoice,
+                ParamSpec("name", "Array name", ParamKind.TEXT),
+                ParamSpec(
+                    "op", "Operation", ParamKind.CHOICE, "add",
+                    listOf(
+                        "add" to "Add to end", "insert" to "Insert at index", "set" to "Set item at index", "remove_at" to "Remove at index",
+                        "remove_value" to "Remove value", "clear" to "Clear", "sort" to "Sort", "reverse" to "Reverse",
+                        "split" to "Fill by splitting text", "join" to "Join into {joined}",
+                    ),
+                ),
+                ParamSpec("value", "Value / text", ParamKind.TEXT, optional = true),
+                ParamSpec("index", "Index (from 0)", ParamKind.TEXT, optional = true),
+                ParamSpec("separator", "Separator (split / join)", ParamKind.TEXT, ","),
+            ),
+        ) { "${varRef(it)}: ${it.p("op", "add")}" },
+        StepSpec(
+            "dict_op", A, "Variables", "Dictionary variable", "Key → value pairs. Read with {v=name[key]}, keys with {v=name[keys]}.",
+            listOf(
+                scopeChoice,
+                ParamSpec("name", "Dictionary name", ParamKind.TEXT),
+                ParamSpec("op", "Operation", ParamKind.CHOICE, "put", listOf("put" to "Set key", "remove" to "Remove key", "clear" to "Clear", "from_json" to "Merge JSON object (e.g. {http_body})")),
+                ParamSpec("key", "Key", ParamKind.TEXT, optional = true),
+                ParamSpec("value", "Value", ParamKind.TEXT, optional = true),
+            ),
+        ) { "${varRef(it)}[${it.p("key")}] ${it.p("op", "put")}" },
+        StepSpec("clear_log", A, "Variables", "Clear run log", "Empties the run log.") { "Clear log" },
+        StepSpec(
+            "say_time", A, "Notify", "Say the time", "Speaks the current time.",
+            listOf(ParamSpec("format", "Clock", ParamKind.CHOICE, "12", listOf("12" to "12-hour", "24" to "24-hour"))),
+        ) { "Say time" },
+        StepSpec(
+            "notification_interact", A, "Notify", "Notification interaction", "Opens, dismisses, presses a button on, or replies to another app's notification. Needs notification access.",
+            listOf(
+                ParamSpec("op", "Do", ParamKind.CHOICE, "tap", listOf("tap" to "Open it", "button" to "Press a button", "reply" to "Reply", "dismiss" to "Dismiss")),
+                ParamSpec("app", "From app", ParamKind.APP, optional = true, hint = "Newest from any app"),
+                ParamSpec("contains", "Title or text contains", ParamKind.TEXT, optional = true),
+                ParamSpec("button", "Button label", ParamKind.TEXT, optional = true, hint = "For “Press a button”"),
+                ParamSpec("text", "Reply text", ParamKind.TEXT, optional = true, hint = "Magic text allowed"),
+            ),
+        ) { "Notification: ${it.p("op", "tap")}" + it.p("app").let { a -> if (a.isBlank()) "" else " ($a)" } },
+        StepSpec(
+            "set_ringtone", A, "Volume & sound", "Set ringtone / notification sound", "Changes a default sound. Needs Modify system settings.",
+            listOf(
+                ParamSpec("which", "Which sound", ParamKind.CHOICE, "ringtone", listOf("ringtone" to "Ringtone", "notification" to "Notification sound", "alarm" to "Alarm sound")),
+                ParamSpec("sound", "Sound", ParamKind.SOUND),
+            ),
+        ) { "Set ${it.p("which", "ringtone")}" },
+        StepSpec(
+            "vibrate_ringing", A, "Volume & sound", "Vibrate when ringing", "Turns vibrate-for-calls on or off. Needs Modify system settings.",
+            listOf(ParamSpec("state", "Set to", ParamKind.CHOICE, "off", listOf("on" to "On", "off" to "Off"))),
+        ) { "Vibrate when ringing ${it.p("state", "off")}" },
+        StepSpec(
+            "dim_screen", A, "Device", "Dim screen (overlay)", "Darkens the screen below minimum brightness. Needs “Display over other apps”.",
+            listOf(
+                ParamSpec("state", "Set to", ParamKind.CHOICE, "on", listOf("on" to "On", "off" to "Off")),
+                ParamSpec("level", "Darkness (%)", ParamKind.NUMBER, "50"),
+            ),
+        ) { "Dim ${it.p("state", "on")}" },
+        StepSpec("keyboard_picker", A, "Device", "Choose keyboard", "Shows the keyboard switcher.") { "Keyboard picker" },
+        StepSpec("voice_search", A, "Apps", "Voice command", "Opens your voice assistant.") { "Voice command" },
+        StepSpec("screensaver", A, "Device", "Start screensaver", "Starts the daydream / screensaver.") { "Screensaver" },
+        StepSpec("hotspot_settings", A, "Connectivity", "Hotspot settings", "Android doesn't let apps switch the hotspot, so this opens its settings page.") { "Hotspot settings" },
+        StepSpec(
+            "launch_activity", A, "Apps", "Launch activity", "Opens a specific screen inside an app (package + activity class).",
+            listOf(
+                ParamSpec("package", "Package", ParamKind.APP),
+                ParamSpec("class", "Activity class", ParamKind.TEXT, hint = "e.g. .SettingsActivity or com.app.SettingsActivity"),
+            ),
+        ) { "${it.p("package")}/${it.p("class")}" },
+        StepSpec(
+            "open_file", A, "Files", "Open file", "Opens a file in a matching app.",
+            listOf(ParamSpec("path", "File", ParamKind.TEXT, hint = fileHint)),
+        ) { "Open ${it.p("path")}" },
+        StepSpec(
+            "write_file", A, "Files", "Write to file", "Appends or writes text to a file (great for logs and CSVs).",
+            listOf(
+                ParamSpec("path", "File", ParamKind.TEXT, "notes.txt", hint = fileHint),
+                ParamSpec("text", "Text", ParamKind.TEXT, hint = "Magic text allowed, e.g. {date} {time},{battery}"),
+                ParamSpec("mode", "Mode", ParamKind.CHOICE, "append", listOf("append" to "Append", "overwrite" to "Overwrite")),
+                ParamSpec("newline", "Add new line", ParamKind.CHOICE, "yes", listOf("yes" to "Yes", "no" to "No")),
+            ),
+        ) { "${it.p("mode", "append").replaceFirstChar { c -> c.uppercase() }} → ${it.p("path", "notes.txt")}" },
+        StepSpec(
+            "read_file", A, "Files", "Read file", "Loads a text file into a variable.",
+            listOf(
+                ParamSpec("path", "File", ParamKind.TEXT, hint = fileHint),
+                scopeChoice.copy(default = "local"),
+                ParamSpec("name", "Save into variable", ParamKind.TEXT, "file"),
+            ),
+        ) { "Read ${it.p("path")} → ${varRef(it)}" },
+        StepSpec(
+            "file_op", A, "Files", "File operation", "Copy, move, delete or create folders.",
+            listOf(
+                ParamSpec("op", "Operation", ParamKind.CHOICE, "copy", listOf("copy" to "Copy", "move" to "Move / rename", "delete" to "Delete", "mkdir" to "Create folder")),
+                ParamSpec("path", "File / folder", ParamKind.TEXT, hint = fileHint),
+                ParamSpec("dest", "Destination (copy / move)", ParamKind.TEXT, optional = true),
+            ),
+        ) { "${it.p("op", "copy")} ${it.p("path")}" },
+        StepSpec(
+            "upload_file", A, "Web", "Upload file / photo", "POSTs a file as multipart/form-data, e.g. to your home server or a Nextcloud / Immich endpoint.",
+            listOf(
+                ParamSpec("path", "File", ParamKind.TEXT, hint = fileHint),
+                ParamSpec("url", "Upload URL", ParamKind.TEXT, "http://"),
+                ParamSpec("field", "Form field name", ParamKind.TEXT, "file"),
+            ),
+        ) { "Upload ${it.p("path")}" },
+        StepSpec(
+            "udp_send", A, "Web", "UDP command", "Sends a UDP packet: wake-on-LAN helpers, smart lights, home automation.",
+            listOf(
+                ParamSpec("host", "Host / IP", ParamKind.TEXT, "192.168.1.255"),
+                ParamSpec("port", "Port", ParamKind.NUMBER, "9"),
+                ParamSpec("message", "Message", ParamKind.TEXT, hint = "Magic text allowed"),
+            ),
+        ) { "UDP ${it.p("host")}:${it.p("port", "9")}" },
+        StepSpec(
+            "clear_call_log", A, "Phone & SMS", "Clear call log", "Deletes call history (optionally only for a number).",
+            listOf(ParamSpec("number", "Only number", ParamKind.TEXT, optional = true, hint = "All calls")),
+        ) { "Clear call log" },
+        StepSpec(
+            "calendar_add", A, "Date & time", "Add calendar event", "Adds an event to your main calendar.",
+            listOf(
+                ParamSpec("title", "Title", ParamKind.TEXT, "TaskTemplar"),
+                ParamSpec("in_minutes", "Starts in (minutes)", ParamKind.NUMBER, "60"),
+                ParamSpec("duration", "Length (minutes)", ParamKind.NUMBER, "60"),
+                ParamSpec("notes", "Notes", ParamKind.TEXT, optional = true),
+            ),
+        ) { "Event “${it.p("title", "TaskTemplar")}”" },
+        StepSpec(
+            "export_macros", A, "Files", "Back up macros", "Saves all macros as JSON (import them from the ⋮ menu). Pair with a Day/time trigger for scheduled backups.",
+            listOf(ParamSpec("path", "File", ParamKind.TEXT, "backup-{date}.json", hint = fileHint)),
+        ) { "Backup → ${it.p("path", "backup-{date}.json")}" },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers + deviceTriggers + launcherTriggers + moreTriggers6 + moreTriggers7
+    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints + deviceConstraints + moreConstraints6 + moreConstraints7
+    val actions: List<StepSpec> = baseActions + dialogActions + screenActions + phoneActions + deviceActions + moreActions6 + moreActions7 + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

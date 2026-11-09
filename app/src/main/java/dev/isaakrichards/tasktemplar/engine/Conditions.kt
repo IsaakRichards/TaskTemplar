@@ -131,6 +131,8 @@ object Conditions {
                 if (step.p("direction", "below") == "below") prev > n && lux <= n else prev < n && lux >= n
             }
 
+            "cell_tower" -> event.type == "cell_tower" && d["macro"] == macro.id && d["idx"] == index.toString()
+
             "edge_swipe" -> event.type == "edge_swipe" && d["macro"] == macro.id && d["idx"] == index.toString()
 
             "nfc" -> event.type == "nfc" && step.p("tag").let { it.isBlank() || it.equals(d["tag"], ignoreCase = true) }

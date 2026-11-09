@@ -60,6 +60,8 @@ object DeviceState {
                 val cm = ctx.getSystemService(ConnectivityManager::class.java)
                 cm.getNetworkCapabilities(cm.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
             }
+            "signal" -> ctx.getSystemService(android.telephony.TelephonyManager::class.java).serviceState?.state ==
+                android.telephony.ServiceState.STATE_IN_SERVICE
             "autosync" -> android.content.ContentResolver.getMasterSyncAutomatically()
             "hotspot" -> {
                 val wm = ctx.applicationContext.getSystemService(WifiManager::class.java)
@@ -68,6 +70,22 @@ object DeviceState {
             else -> false
         }
     }.getOrDefault(false)
+
+    /** Id of the cell tower the phone is registered to, or null (needs location permission). */
+    @android.annotation.SuppressLint("MissingPermission")
+    fun cellId(ctx: Context): String? = runCatching {
+        val tm = ctx.getSystemService(android.telephony.TelephonyManager::class.java)
+        val info = tm.allCellInfo?.firstOrNull { it.isRegistered } ?: return null
+        when (info) {
+            is android.telephony.CellInfoLte -> info.cellIdentity.ci.toString()
+            is android.telephony.CellInfoGsm -> info.cellIdentity.cid.toString()
+            is android.telephony.CellInfoWcdma -> info.cellIdentity.cid.toString()
+            is android.telephony.CellInfoCdma -> info.cellIdentity.basestationId.toString()
+            else -> if (android.os.Build.VERSION.SDK_INT >= 29 && info is android.telephony.CellInfoNr) {
+                (info.cellIdentity as android.telephony.CellIdentityNr).nci.toString()
+            } else null
+        }
+    }.getOrNull()?.takeIf { it != Int.MAX_VALUE.toString() && it != Long.MAX_VALUE.toString() }
 
     /** "wifi", "mobile", "ethernet" or "none". */
     fun connectionType(ctx: Context): String {

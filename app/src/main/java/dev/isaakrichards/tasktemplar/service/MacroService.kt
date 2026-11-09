@@ -56,6 +56,44 @@ class MacroService : Service() {
     private var lastSync: Boolean? = null
     private var syncHandle: Any? = null
     private val ssidPresent = HashMap<String, Boolean>()
+    private var lastSignal: Boolean? = null
+    private var lastCell: String? = null
+    private val cellInside = HashMap<String, Boolean>()
+
+    @Suppress("DEPRECATION")
+    private val phoneListener = object : android.telephony.PhoneStateListener() {
+        @Deprecated("Deprecated in Java")
+        override fun onServiceStateChanged(serviceState: android.telephony.ServiceState?) {
+            val on = serviceState?.state == android.telephony.ServiceState.STATE_IN_SERVICE
+            if (lastSignal != null && on != lastSignal) emit(MacroEvent("signal", mapOf("state" to if (on) "on" else "off")))
+            lastSignal = on
+            checkCell()
+        }
+
+        @Deprecated("Deprecated in Java")
+        override fun onCellInfoChanged(cellInfo: MutableList<android.telephony.CellInfo>?) = checkCell()
+    }
+
+    /** Fires "Cell tower" triggers when the registered cell changes. */
+    private fun checkCell() {
+        val users = LauncherBridge.usersOf("cell_tower")
+        if (users.isEmpty()) return
+        val id = DeviceState.cellId(this) ?: return
+        if (id != lastCell) {
+            lastCell = id
+            MacroStore.log("Cell tower", "Now on cell $id")
+        }
+        for ((macro, idx, step) in users) {
+            val ids = step.p("ids").split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+            val key = "${macro.id}#$idx"
+            val inside = id in ids
+            val was = cellInside[key]
+            cellInside[key] = inside
+            if (was != null && was != inside && inside == (step.p("state", "enter") == "enter")) {
+                emit(MacroEvent("cell_tower", mapOf("macro" to macro.id, "idx" to idx.toString(), "cell" to id)))
+            }
+        }
+    }
 
     private val defaultNetCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = checkConnection()
@@ -341,6 +379,13 @@ class MacroService : Service() {
                 }
             }
         }.getOrNull()
+        runCatching {
+            @Suppress("DEPRECATION")
+            getSystemService(TelephonyManager::class.java).listen(
+                phoneListener,
+                android.telephony.PhoneStateListener.LISTEN_SERVICE_STATE or android.telephony.PhoneStateListener.LISTEN_CELL_INFO,
+            )
+        }
         sensors = SensorWatch(this) { emit(it) }
         floating = FloatingButtons(this)
         webhooks = WebhookServer(this)
@@ -389,6 +434,10 @@ class MacroService : Service() {
         if (::floating.isInitialized) floating.removeAll()
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(defaultNetCallback) }
         runCatching { contentResolver.unregisterContentObserver(smsObserver) }
+        runCatching {
+            @Suppress("DEPRECATION")
+            getSystemService(TelephonyManager::class.java).listen(phoneListener, android.telephony.PhoneStateListener.LISTEN_NONE)
+        }
         runCatching { getSystemService(android.content.ClipboardManager::class.java).removePrimaryClipChangedListener(clipListener) }
         syncHandle?.let { runCatching { android.content.ContentResolver.removeStatusChangeListener(it) } }
         if (::webhooks.isInitialized) webhooks.stop()

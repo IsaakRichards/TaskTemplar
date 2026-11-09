@@ -124,7 +124,7 @@ fun MacroEditorScreen(
                         } else if (macro.actions.isEmpty()) {
                             Toast.makeText(ctx, "Add at least one action", Toast.LENGTH_SHORT).show()
                         } else {
-                            onSave(macro.copy(name = macro.name.trim()))
+                            onSave(macro.copy(name = macro.name.trim(), category = macro.category.trim()))
                         }
                     }) { Icon(Icons.Default.Check, "Save", tint = MaterialTheme.colorScheme.primary) }
                 },
@@ -144,6 +144,13 @@ fun MacroEditorScreen(
                 value = macro.name,
                 onValueChange = { macro = macro.copy(name = it) },
                 label = { Text("Macro name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = macro.category,
+                onValueChange = { macro = macro.copy(category = it) },
+                label = { Text("Category (optional)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )

@@ -9,7 +9,11 @@ import dev.isaakrichards.tasktemplar.data.GlobalVars
  *  - {key}     → any run value (time, battery, trigger data, local variables…)
  */
 object MagicText {
-    private val varRef = Regex("""\{(v|lv|sw)=([^}]+)\}""")
+    private val varRef = Regex("""\{(v|lv|sw)=([^}\[\]]+)\}""")
+    private val itemRef = Regex("""\{(v|lv)=([^}\[\]]+)\[([^\]]*)\]\}""")
+
+    /** Reads an item from an array / dictionary variable; replaced at app start. */
+    var item: (String, String) -> String = { _, _ -> "" }
 
     /** Seconds on a named stopwatch, for {sw=name}. */
     var stopwatch: (String) -> String = { "0" }
@@ -27,6 +31,12 @@ object MagicText {
                 else -> vars[name] ?: ""
             }
         }
-        return vars.entries.fold(withVars) { acc, (k, v) -> acc.replace("{$k}", v) }
+        // Second pass: list / dictionary items, now that any {lv=i} inside the brackets is filled in.
+        val withItems = itemRef.replace(withVars) { m ->
+            val name = m.groupValues[2].trim()
+            val json = if (m.groupValues[1] == "v") global(name) else vars[name] ?: ""
+            item(json, m.groupValues[3])
+        }
+        return vars.entries.fold(withItems) { acc, (k, v) -> acc.replace("{$k}", v) }
     }
 }

@@ -30,7 +30,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.runtime.collectAsState
 import android.widget.Toast
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import dev.isaakrichards.tasktemplar.data.MacroStore
+import dev.isaakrichards.tasktemplar.data.Places
 import dev.isaakrichards.tasktemplar.engine.Geo
 import dev.isaakrichards.tasktemplar.engine.GeoMath
 import kotlinx.coroutines.launch
@@ -287,9 +290,33 @@ private fun ParamField(
             Text("$label: $name")
         }
 
+        ParamKind.SOUND -> {
+            val picker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+                @Suppress("DEPRECATION")
+                val uri = res.data?.getParcelableExtra<android.net.Uri>(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+                if (uri != null) onChange(uri.toString())
+            }
+            val name = remember(value) {
+                if (value.isBlank()) "Choose…" else runCatching {
+                    android.media.RingtoneManager.getRingtone(ctx, android.net.Uri.parse(value))?.getTitle(ctx)
+                }.getOrNull() ?: value
+            }
+            OutlinedButton(
+                onClick = {
+                    picker.launch(
+                        android.content.Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+                            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALL)
+                            .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("$label: $name") }
+        }
+
         ParamKind.LOCATION -> {
             val scope = rememberCoroutineScope()
             var locating by remember { mutableStateOf(false) }
+            var placesOpen by remember { mutableStateOf(false) }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = value,
@@ -311,6 +338,14 @@ private fun ParamField(
                         }
                     },
                 ) { Text(if (locating) "…" else "Here") }
+                TextButton(onClick = { placesOpen = true }) { Text("★") }
+            }
+            if (placesOpen) {
+                PlacesDialog(
+                    current = value,
+                    onPick = { onChange(it); placesOpen = false },
+                    onDismiss = { placesOpen = false },
+                )
             }
         }
 
@@ -382,6 +417,42 @@ fun AppPickerDialog(onPick: (String) -> Unit, onDismiss: () -> Unit) {
                                 Text(pkg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun PlacesDialog(current: String, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var places by remember { mutableStateOf(Places.all(ctx)) }
+    var newName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Saved places") },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (places.isEmpty()) Text("No saved places yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                places.forEach { (name, latLng) ->
+                    Row(Modifier.fillMaxWidth().clickable { onPick(latLng) }, verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                            Text(name, style = MaterialTheme.typography.titleSmall)
+                            Text(latLng, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { Places.delete(ctx, name); places = Places.all(ctx) }) { Icon(Icons.Default.Close, "Delete $name") }
+                    }
+                }
+                if (GeoMath.parse(current) != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(newName, { newName = it }, label = { Text("Save $current as…") }, singleLine = true, modifier = Modifier.weight(1f))
+                        TextButton(
+                            enabled = newName.isNotBlank(),
+                            onClick = { Places.save(ctx, newName, current); newName = ""; places = Places.all(ctx) },
+                        ) { Text("Save") }
                     }
                 }
             }

@@ -70,6 +70,14 @@ screensaver, Wi-Fi network in range, SMS sent and clipboard changed. New constra
 (AND / OR / NOT / NAND), light level, proximity, stopwatch value, hotspot, VPN, auto-sync. New actions:
 Stopwatch (`{sw=name}`) and Get weather (`{temp}`, `{weather}`…).
 
+**Everything else (v0.8)**: array and dictionary variables (`{v=list[0]}`, `{v=dict[key]}`, `{v=list[#]}`),
+action blocks (Run macro → “Run here as an action block”), mobile-signal and cell-tower triggers, notification
+interaction (open / press button / reply / dismiss), set ringtone, vibrate-when-ringing, dim-screen overlay,
+keyboard picker, voice command, screensaver, launch activity, file actions (write / read / copy / move /
+delete / open / upload), UDP packets, clear call log, add calendar event, say the time, clear log, and
+Back up macros. Plus macro **categories**, a local **template library** (⋮ → New from template) and
+**saved places** (★ next to any location field).
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

@@ -50,10 +50,12 @@ data class Macro(
     val constraints: List<Step> = emptyList(),
     val constraintMode: String = MODE_ALL,
     val actions: List<Step> = emptyList(),
+    val category: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("name", name)
+        put("category", category)
         put("enabled", enabled)
         put("constraintMode", constraintMode)
         put("triggers", JSONArray().apply { triggers.forEach { put(it.toJson()) } })
@@ -75,6 +77,7 @@ data class Macro(
         fun fromJson(o: JSONObject): Macro = Macro(
             id = o.optString("id").ifBlank { UUID.randomUUID().toString() },
             name = o.optString("name", "Macro"),
+            category = o.optString("category", ""),
             enabled = o.optBoolean("enabled", true),
             constraintMode = o.optString("constraintMode", MODE_ALL),
             triggers = o.optJSONArray("triggers").steps(),

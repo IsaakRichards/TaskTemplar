@@ -215,11 +215,36 @@ object MacroEngine {
                 val target = MacroStore.get(step.p("macro")) ?: error("Macro not found")
                 if (step.p("check", "ignore") == "check" && !Conditions.constraintsPass(ctx, target)) {
                     "skipped “${target.name}” (constraints not met)"
+                } else if (step.p("mode", "separate") == "inline") {
+                    // Action block: run its actions right here, sharing local variables, and wait.
+                    val depth = (vars["_depth"]?.toIntOrNull() ?: 0) + 1
+                    if (depth > 10) error("Action blocks nested more than 10 deep")
+                    vars["_depth"] = depth.toString()
+                    try {
+                        val r = Flow(target.actions).run(
+                            cond = { s -> Conditions.allPass(ctx, s.conditions, s.conditionMode, vars) },
+                            loopCount = { s -> MagicText.apply(s.p("count", "3"), vars).trim().toDoubleOrNull()?.toInt() ?: 0 },
+                            onPass = { pass -> vars["loop_index"] = pass.toString() },
+                        ) { a -> execute(ctx, target, a, vars) }
+                        if (r == Flow.Result.STEP_LIMIT) error("“${target.name}” hit the step limit")
+                    } finally {
+                        vars["_depth"] = (depth - 1).toString()
+                    }
+                    "ran block “${target.name}”"
                 } else {
                     start(ctx, target, MacroEvent("macro", mapOf("from" to macro.name)))
                     null
                 }
             }
+
+            "list_op" -> Collections.listOp(step, vars)
+
+            "dict_op" -> Collections.dictOp(step, vars)
+
+            "clear_log", "say_time", "notification_interact", "set_ringtone", "vibrate_ringing", "dim_screen",
+            "keyboard_picker", "voice_search", "screensaver", "hotspot_settings", "launch_activity", "open_file",
+            "clear_call_log", "udp_send", "write_file", "read_file", "file_op", "upload_file", "calendar_add", "export_macros" ->
+                MiscActions.execute(ctx, step, vars)
 
             "macro_enable" -> {
                 val target = MacroStore.get(step.p("macro")) ?: error("Macro not found")

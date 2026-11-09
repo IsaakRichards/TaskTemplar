@@ -29,6 +29,7 @@ class TemplarApp : Application() {
         Conditions.activeNotifications = { NotifListener.active() }
         Conditions.sensorValue = { key -> SensorWatch.latest[key] }
         Conditions.stopwatchSeconds = { name -> Stopwatches.elapsedMs(this, name) / 1000.0 }
+        MagicText.item = { json, index -> dev.isaakrichards.tasktemplar.engine.Collections.read(json, index) }
         MagicText.stopwatch = { name -> (Stopwatches.elapsedMs(this, name) / 1000).toString() }
         Conditions.lastLocation = { Geo.lastKnown(this)?.let { it.latitude to it.longitude } }
         Conditions.callState = {
