@@ -193,19 +193,37 @@ private fun buildPerms(ctx: Context, request: (Array<String>) -> Unit): List<Per
     ) { openSettings(ctx, Settings.ACTION_MANAGE_OVERLAY_PERMISSION, true) }
 
     list += Perm(
-        "Location", "Android hides Wi-Fi network names without it. Only needed to match a specific network.",
+        "Location", "Geofences, location constraint, Get location, and matching Wi-Fi network names.",
         has(ctx, Manifest.permission.ACCESS_FINE_LOCATION),
     ) { request(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) }
 
     if (sdk >= 29 && has(ctx, Manifest.permission.ACCESS_FINE_LOCATION)) {
         list += Perm(
-            "Location — all the time", "Lets Wi-Fi name matching work while the app is in the background.",
+            "Location — all the time", "Needed for geofences and Wi-Fi name matching while the app is in the background.",
             has(ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION),
         ) {
             if (sdk >= 30) openSettings(ctx, Settings.ACTION_APPLICATION_DETAILS_SETTINGS, true)
             else request(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION))
         }
     }
+
+    list += Perm(
+        "Phone", "Call triggers, call state, and making / answering / ending calls.",
+        has(ctx, Manifest.permission.READ_PHONE_STATE) && has(ctx, Manifest.permission.READ_CALL_LOG) &&
+            has(ctx, Manifest.permission.CALL_PHONE) && has(ctx, Manifest.permission.ANSWER_PHONE_CALLS),
+    ) {
+        request(
+            arrayOf(
+                Manifest.permission.READ_PHONE_STATE, Manifest.permission.READ_CALL_LOG,
+                Manifest.permission.CALL_PHONE, Manifest.permission.ANSWER_PHONE_CALLS,
+            ),
+        )
+    }
+
+    list += Perm(
+        "SMS", "SMS received trigger and Send SMS action.",
+        has(ctx, Manifest.permission.RECEIVE_SMS) && has(ctx, Manifest.permission.SEND_SMS),
+    ) { request(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.SEND_SMS)) }
 
     if (sdk >= 31) {
         list += Perm(

@@ -28,7 +28,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.collectAsState
+import android.widget.Toast
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.isaakrichards.tasktemplar.data.MacroStore
+import dev.isaakrichards.tasktemplar.engine.Geo
+import dev.isaakrichards.tasktemplar.engine.GeoMath
+import kotlinx.coroutines.launch
 import dev.isaakrichards.tasktemplar.model.Macro
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -280,6 +285,33 @@ private fun ParamField(
         ParamKind.MACRO -> OutlinedButton(onClick = onPickMacro, modifier = Modifier.fillMaxWidth()) {
             val name = if (value.isBlank()) (spec.hint.ifBlank { "Choose…" }) else Catalog.macroName(value)
             Text("$label: $name")
+        }
+
+        ParamKind.LOCATION -> {
+            val scope = rememberCoroutineScope()
+            var locating by remember { mutableStateOf(false) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onChange,
+                    label = { Text(label) },
+                    placeholder = if (spec.hint.isNotEmpty()) ({ Text(spec.hint) }) else null,
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    enabled = !locating,
+                    onClick = {
+                        locating = true
+                        scope.launch {
+                            val loc = runCatching { Geo.current(ctx, 20_000) }.getOrNull()
+                            locating = false
+                            if (loc != null) onChange(GeoMath.format(loc.latitude, loc.longitude))
+                            else Toast.makeText(ctx, "No location: grant Location on the Permissions screen", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                ) { Text(if (locating) "…" else "Here") }
+            }
         }
 
         ParamKind.APP -> Row(verticalAlignment = Alignment.CenterVertically) {

@@ -43,6 +43,12 @@ Home, Recents, notification shade, quick settings, power menu, lock screen and s
 Plus: app installed/removed/updated trigger, app-in-front and notification-present constraints,
 go home, kill background app and clear notifications actions.
 
+**Phone, SMS & location (v0.4)**: call trigger (incoming, answered, outgoing, ended, missed),
+SMS received, geofence enter/leave and sunrise/sunset triggers. All location features use
+Android's own LocationManager, so they work on de-Googled phones. Constraints: call state,
+inside/outside a place, day of month, month. Actions: make / answer / end call, speakerphone, send SMS,
+compose email, open call log, and get location (`{lat}`, `{lng}`, `{location_url}`).
+
 **Magic text**: text fields accept `{time}`, `{date}`, `{battery}`, `{ssid}`, `{macro}`, `{trigger}`;
 notification triggers add `{app}`, `{title}`, `{text}`; Bluetooth adds `{device}`; and after an
 HTTP action, later actions can use `{http_code}` and `{http_body}`. Variables: `{v=name}` (global),

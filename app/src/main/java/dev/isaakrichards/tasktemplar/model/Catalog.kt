@@ -6,7 +6,7 @@ enum class StepKind(val title: String) {
     ACTION("Action"),
 }
 
-enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO }
+enum class ParamKind { TEXT, NUMBER, TIME, DAYS, CHOICE, APP, MACRO, LOCATION }
 
 data class ParamSpec(
     val key: String,
@@ -494,9 +494,114 @@ object Catalog {
         ) { s -> "Clear " + s.p("app").let { if (it.isBlank()) "all" else it } },
     )
 
-    val triggers: List<StepSpec> = baseTriggers + moreTriggers
-    val constraints: List<StepSpec> = baseConstraints + logicConstraints
-    val actions: List<StepSpec> = baseActions + screenActions + logicActions
+    // ---- Stage 3: phone, SMS, location ----
+
+    private val callStates = listOf(
+        "incoming" to "Incoming (ringing)", "answered" to "Answered", "outgoing" to "Outgoing call started",
+        "ended" to "Call ended", "missed" to "Missed call",
+    )
+
+    private val locationParam = ParamSpec("location", "Place (lat,lng)", ParamKind.LOCATION, hint = "e.g. 25.8690,-97.5027")
+
+    private val phoneTriggers: List<StepSpec> = listOf(
+        StepSpec(
+            "call", T, "Phone & SMS", "Phone call", "Fires on incoming, answered, outgoing, ended or missed calls. Number is {number}.",
+            listOf(
+                ParamSpec("state", "When", ParamKind.CHOICE, "incoming", callStates),
+                ParamSpec("number", "Number", ParamKind.TEXT, optional = true, hint = "Any number (outgoing numbers aren't visible)"),
+            ),
+        ) { s -> (callStates.firstOrNull { it.first == s.p("state", "incoming") }?.second ?: "Call") + s.p("number").let { if (it.isBlank()) "" else " · $it" } },
+        StepSpec(
+            "sms_received", T, "Phone & SMS", "SMS received", "Fires when a text arrives. Sender is {number}, message is {text}.",
+            listOf(
+                ParamSpec("number", "From number", ParamKind.TEXT, optional = true, hint = "Anyone"),
+                ParamSpec("contains", "Message contains", ParamKind.TEXT, optional = true),
+            ),
+        ) { s -> "SMS" + s.p("number").let { if (it.isBlank()) "" else " from $it" } + s.p("contains").let { if (it.isBlank()) "" else " containing “$it”" } },
+        StepSpec(
+            "geofence", T, "Location", "Location (geofence)", "Fires when you enter or leave an area. Works without Google services. Needs location “all the time”.",
+            listOf(
+                ParamSpec("state", "When", ParamKind.CHOICE, "enter", listOf("enter" to "Entering the area", "exit" to "Leaving the area")),
+                locationParam,
+                ParamSpec("radius", "Radius (metres)", ParamKind.NUMBER, "150"),
+            ),
+        ) { s -> "${if (s.p("state", "enter") == "enter") "Enter" else "Leave"} ${s.p("radius", "150")} m around ${s.p("location", "?")}" },
+        StepSpec(
+            "sun", T, "Date & time", "Sunrise / sunset", "Fires at sunrise or sunset for a place, with an optional offset.",
+            listOf(
+                ParamSpec("event", "Event", ParamKind.CHOICE, "sunset", listOf("sunrise" to "Sunrise", "sunset" to "Sunset")),
+                ParamSpec("offset", "Offset (minutes, negative = before)", ParamKind.NUMBER, "0"),
+                locationParam,
+            ),
+        ) { s ->
+            val off = s.p("offset", "0").toIntOrNull() ?: 0
+            val tail = when {
+                off > 0 -> " +$off min"
+                off < 0 -> " $off min"
+                else -> ""
+            }
+            "At ${s.p("event", "sunset")}$tail"
+        },
+    )
+
+    private val phoneConstraints: List<StepSpec> = listOf(
+        StepSpec(
+            "call_state", C, "Phone & SMS", "Call state", "Only when the phone is idle, ringing or in a call.",
+            listOf(ParamSpec("state", "Phone is", ParamKind.CHOICE, "idle", listOf("idle" to "Idle", "ringing" to "Ringing", "in_call" to "In a call"))),
+        ) { "Phone ${it.p("state", "idle").replace('_', ' ')}" },
+        StepSpec(
+            "location", C, "Location", "Location", "Only when inside / outside an area (uses the last known location).",
+            listOf(
+                ParamSpec("state", "You are", ParamKind.CHOICE, "inside", listOf("inside" to "Inside", "outside" to "Outside")),
+                locationParam,
+                ParamSpec("radius", "Radius (metres)", ParamKind.NUMBER, "150"),
+            ),
+        ) { s -> "${s.p("state", "inside").replaceFirstChar { it.uppercase() }} ${s.p("radius", "150")} m of ${s.p("location", "?")}" },
+        StepSpec(
+            "day_of_month", C, "Date & time", "Day of month", "Only on certain dates, e.g. 1, 15, 28-31.",
+            listOf(ParamSpec("days", "Days of month", ParamKind.TEXT, "1", hint = "Commas and ranges: 1, 15, 28-31")),
+        ) { "On day ${it.p("days", "1")}" },
+        StepSpec(
+            "month", C, "Date & time", "Month", "Only in certain months (1 = January), e.g. 6-8 or 12, 1, 2.",
+            listOf(ParamSpec("months", "Months", ParamKind.TEXT, "12", hint = "Commas and ranges: 6-8, 12")),
+        ) { "In month ${it.p("months", "12")}" },
+    )
+
+    private val phoneActions: List<StepSpec> = listOf(
+        StepSpec(
+            "make_call", A, "Phone & SMS", "Make call", "Dials a number straight away.",
+            listOf(ParamSpec("number", "Number", ParamKind.TEXT, hint = "Magic text allowed, e.g. {number}")),
+        ) { "Call ${it.p("number")}" },
+        StepSpec("answer_call", A, "Phone & SMS", "Answer call", "Picks up a ringing call.") { "Answer call" },
+        StepSpec("end_call", A, "Phone & SMS", "End / reject call", "Hangs up or rejects the current call (Android 9+).") { "End call" },
+        StepSpec(
+            "speakerphone", A, "Phone & SMS", "Speakerphone", "Turns the call speaker on or off.",
+            listOf(ParamSpec("state", "Set to", ParamKind.CHOICE, "toggle", listOf("on" to "On", "off" to "Off", "toggle" to "Toggle"))),
+        ) { "Speaker ${it.p("state", "toggle")}" },
+        StepSpec(
+            "send_sms", A, "Phone & SMS", "Send SMS", "Sends a text message in the background.",
+            listOf(
+                ParamSpec("number", "To number", ParamKind.TEXT, hint = "Reply with {number}"),
+                ParamSpec("text", "Message", ParamKind.TEXT, hint = "Magic text allowed, e.g. I'm here: {location_url}"),
+            ),
+        ) { "SMS ${it.p("number")}: “${it.p("text")}”" },
+        StepSpec(
+            "send_email", A, "Phone & SMS", "Compose email", "Opens your email app with the message filled in.",
+            listOf(
+                ParamSpec("to", "To", ParamKind.TEXT),
+                ParamSpec("subject", "Subject", ParamKind.TEXT, optional = true),
+                ParamSpec("body", "Body", ParamKind.TEXT, optional = true, hint = "Magic text allowed"),
+            ),
+        ) { "Email ${it.p("to")}" },
+        StepSpec("open_call_log", A, "Phone & SMS", "Open call log", "Shows the call history.") { "Call log" },
+        StepSpec(
+            "get_location", A, "Location", "Get current location", "Fixes your position and sets {lat}, {lng}, {accuracy} and {location_url} (OpenStreetMap link).",
+        ) { "Get location" },
+    )
+
+    val triggers: List<StepSpec> = baseTriggers + moreTriggers + phoneTriggers
+    val constraints: List<StepSpec> = baseConstraints + logicConstraints + phoneConstraints
+    val actions: List<StepSpec> = baseActions + screenActions + phoneActions + logicActions
 
     /** Logic steps whose block needs a closing partner, added automatically. */
     val blockPartner = mapOf("if" to "end_if", "loop" to "end_loop")

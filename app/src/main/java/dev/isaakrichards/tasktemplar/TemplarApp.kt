@@ -5,7 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import dev.isaakrichards.tasktemplar.data.GlobalVars
 import dev.isaakrichards.tasktemplar.data.MacroStore
+import android.telephony.TelephonyManager
 import dev.isaakrichards.tasktemplar.engine.Conditions
+import dev.isaakrichards.tasktemplar.engine.Geo
 import dev.isaakrichards.tasktemplar.engine.MacroEngine
 import dev.isaakrichards.tasktemplar.model.Catalog
 import dev.isaakrichards.tasktemplar.model.MacroEvent
@@ -22,6 +24,18 @@ class TemplarApp : Application() {
         Conditions.macroEnabled = { id -> MacroStore.get(id)?.enabled }
         Conditions.foregroundApp = { TemplarAccessibility.foregroundPkg }
         Conditions.activeNotifications = { NotifListener.active() }
+        Conditions.lastLocation = { Geo.lastKnown(this)?.let { it.latitude to it.longitude } }
+        Conditions.callState = {
+            runCatching {
+                @Suppress("DEPRECATION")
+                val state = getSystemService(TelephonyManager::class.java).callState
+                when (state) {
+                    TelephonyManager.CALL_STATE_RINGING -> "ringing"
+                    TelephonyManager.CALL_STATE_OFFHOOK -> "in_call"
+                    else -> "idle"
+                }
+            }.getOrDefault("idle")
+        }
         GlobalVars.onChanged = { v ->
             MacroEngine.dispatch(this, MacroEvent("variable", mapOf("name" to v.name, "value" to v.value)))
         }

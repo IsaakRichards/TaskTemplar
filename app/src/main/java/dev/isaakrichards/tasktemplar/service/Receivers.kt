@@ -23,6 +23,19 @@ class BootReceiver : BroadcastReceiver() {
     }
 }
 
+/** Feeds incoming texts to "SMS received" triggers. */
+class SmsReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != android.provider.Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val parts = android.provider.Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
+        if (parts.isEmpty()) return
+        val from = parts[0].originatingAddress ?: ""
+        val body = parts.joinToString("") { it.messageBody ?: "" }
+        MacroStore.init(context)
+        MacroEngine.dispatch(context, MacroEvent("sms", mapOf("number" to from, "text" to body)))
+    }
+}
+
 /** Feeds posted notifications to "Notification received" triggers. */
 class NotifListener : NotificationListenerService() {
 

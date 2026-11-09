@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -90,6 +91,38 @@ class MacroService : Service() {
         }
     }
 
+    private var callState = TelephonyManager.EXTRA_STATE_IDLE
+    private var callAnswered = false
+    private var callNumber = ""
+
+    private val phoneReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val state = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
+            @Suppress("DEPRECATION")
+            val incoming = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
+            if (!incoming.isNullOrBlank()) callNumber = incoming
+            if (state == callState) return // Android often sends each change twice
+            val prev = callState
+            callState = state
+            fun call(kind: String) = emit(MacroEvent("call", mapOf("state" to kind, "number" to callNumber)))
+            when (state) {
+                TelephonyManager.EXTRA_STATE_RINGING -> {
+                    callAnswered = false
+                    call("incoming")
+                }
+                TelephonyManager.EXTRA_STATE_OFFHOOK -> {
+                    callAnswered = true
+                    call(if (prev == TelephonyManager.EXTRA_STATE_RINGING) "answered" else "outgoing")
+                }
+                TelephonyManager.EXTRA_STATE_IDLE -> {
+                    if (prev == TelephonyManager.EXTRA_STATE_RINGING && !callAnswered) call("missed") else call("ended")
+                    callAnswered = false
+                    callNumber = ""
+                }
+            }
+        }
+    }
+
     private val netCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) = wifiChanged(true)
         override fun onLost(network: Network) = wifiChanged(false)
@@ -119,6 +152,9 @@ class MacroService : Service() {
             addDataScheme("package")
         }
         ContextCompat.registerReceiver(this, packageReceiver, pkgFilter, ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(
+            this, phoneReceiver, IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED), ContextCompat.RECEIVER_EXPORTED,
+        )
 
         runCatching {
             val cm = getSystemService(ConnectivityManager::class.java)
@@ -137,6 +173,7 @@ class MacroService : Service() {
     override fun onDestroy() {
         runCatching { unregisterReceiver(receiver) }
         runCatching { unregisterReceiver(packageReceiver) }
+        runCatching { unregisterReceiver(phoneReceiver) }
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()

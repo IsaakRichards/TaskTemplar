@@ -34,12 +34,13 @@ object AlarmScheduler {
         for (macro in MacroStore.macros.value) {
             if (!macro.enabled) continue
             macro.triggers.forEachIndexed { i, t ->
-                if (t.type == "time" || t.type == "interval") {
+                if (t.type == "time" || t.type == "interval" || t.type == "sun") {
                     if (schedule(app, am, macro, i, t)) codes += code(macro, i).toString()
                 }
             }
         }
         prefs.edit().putStringSet(KEY_CODES, codes).apply()
+        Geo.refreshFences(app)
     }
 
     fun scheduleNext(ctx: Context, macroId: String, index: Int) {
@@ -74,6 +75,12 @@ object AlarmScheduler {
                 (0..7).asSequence()
                     .map { now.toLocalDate().plusDays(it.toLong()).atTime(t).atZone(now.zone) }
                     .firstOrNull { it.isAfter(now) && it.dayOfWeek.value in days }
+                    ?.toInstant()?.toEpochMilli()
+            }
+        }
+        "sun" -> {
+            GeoMath.parse(step.p("location"))?.let { (lat, lng) ->
+                GeoMath.nextSun(step.p("event", "sunrise"), step.p("offset", "0").toLongOrNull() ?: 0L, lat, lng, now)
                     ?.toInstant()?.toEpochMilli()
             }
         }

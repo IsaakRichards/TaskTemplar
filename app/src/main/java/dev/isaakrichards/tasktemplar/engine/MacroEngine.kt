@@ -172,6 +172,9 @@ object MacroEngine {
             "ui_click", "ui_type", "ui_scroll", "ui_swipe", "global_action", "read_screen" ->
                 UiActions.execute(step, vars)
 
+            "make_call", "answer_call", "end_call", "speakerphone", "send_sms", "send_email", "open_call_log", "get_location" ->
+                PhoneActions.execute(ctx, step, vars)
+
             else -> Actions.execute(ctx, step, vars)
         }
     }

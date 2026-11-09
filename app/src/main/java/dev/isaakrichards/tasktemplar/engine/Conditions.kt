@@ -19,11 +19,20 @@ object Conditions {
     /** (app, title, text) of showing notifications; wired to the notification listener at app start. */
     var activeNotifications: () -> List<Triple<String, String, String>> = { emptyList() }
 
+    /** "idle", "ringing" or "in_call"; wired to TelephonyManager at app start. */
+    var callState: () -> String = { "idle" }
+
+    /** Last known (lat, lng); wired to LocationManager at app start. */
+    var lastLocation: () -> Pair<Double, Double>? = { null }
+
+    /** Today's date; replaceable in tests. */
+    var today: () -> LocalDate = { LocalDate.now() }
+
     /** Does trigger number [index] of [macro] match this [event]? */
     fun triggerMatches(macro: Macro, index: Int, step: Step, event: MacroEvent): Boolean {
         val d = event.data
         return when (step.type) {
-            "time", "interval" ->
+            "time", "interval", "sun" ->
                 event.type == "alarm" && d["macro"] == macro.id && d["idx"] == index.toString()
 
             "boot" -> event.type == "boot"
@@ -62,6 +71,17 @@ object Conditions {
             "screen_text" ->
                 event.type == "screen_text" && d["macro"] == macro.id && d["idx"] == index.toString()
 
+            "call" -> event.type == "call" &&
+                d["state"] == step.p("state", "incoming") &&
+                numberMatches(step.p("number"), d["number"] ?: "")
+
+            "sms_received" -> event.type == "sms" &&
+                numberMatches(step.p("number"), d["number"] ?: "") &&
+                step.p("contains").let { it.isBlank() || (d["text"] ?: "").contains(it, ignoreCase = true) }
+
+            "geofence" -> event.type == "geofence" && d["macro"] == macro.id &&
+                d["idx"] == index.toString() && d["state"] == step.p("state", "enter")
+
             "variable_changed" -> event.type == "variable" &&
                 step.p("name").let { it.isBlank() || it.trim().equals(d["name"], ignoreCase = true) }
 
@@ -96,6 +116,23 @@ object Conditions {
 
         "macro_enabled" -> macroEnabled(step.p("macro")) == (step.p("state", "enabled") == "enabled")
 
+        "call_state" -> callState() == step.p("state", "idle")
+
+        "location" -> {
+            val here = lastLocation()
+            val center = GeoMath.parse(step.p("location"))
+            if (here == null || center == null) {
+                false
+            } else {
+                val radius = step.p("radius", "150").toDoubleOrNull() ?: 150.0
+                (GeoMath.distance(here, center) <= radius) == (step.p("state", "inside") == "inside")
+            }
+        }
+
+        "day_of_month" -> today().dayOfMonth in numberList(step.p("days"))
+
+        "month" -> today().monthValue in numberList(step.p("months"))
+
         "app_foreground" -> {
             val inFront = step.p("app").isNotBlank() && foregroundApp() == step.p("app")
             inFront == (step.p("state", "foreground") == "foreground")
@@ -118,7 +155,7 @@ object Conditions {
             else !now.isBefore(from) || now.isBefore(to)
         }
 
-        "days" -> LocalDate.now().dayOfWeek.value in Catalog.parseDays(step.p("days", Catalog.ALL_DAYS))
+        "days" -> today().dayOfWeek.value in Catalog.parseDays(step.p("days", Catalog.ALL_DAYS))
 
         "battery" -> {
             val level = DeviceState.batteryLevel(ctx)
@@ -142,6 +179,25 @@ object Conditions {
 
         else -> true
     }
+
+    /** Matches phone numbers loosely: digits only, and the shorter must end the longer. */
+    fun numberMatches(want: String, got: String): Boolean {
+        if (want.isBlank()) return true
+        val a = want.filter { it.isDigit() }
+        val b = got.filter { it.isDigit() }
+        if (a.isEmpty() || b.isEmpty()) return got.contains(want, ignoreCase = true)
+        return if (a.length <= b.length) b.endsWith(a) else a.endsWith(b)
+    }
+
+    /** Parses "1, 15, 20-25" into a set of numbers. */
+    fun numberList(s: String): Set<Int> = s.split(',').flatMap { part ->
+        val p = part.trim()
+        val range = p.split('-').map { it.trim().toIntOrNull() }
+        when {
+            range.size == 2 && range[0] != null && range[1] != null -> (range[0]!!..range[1]!!).toList()
+            else -> listOfNotNull(p.toIntOrNull())
+        }
+    }.toSet()
 
     fun parseTime(s: String): LocalTime = runCatching {
         val (h, m) = s.split(':').map { it.trim().toInt() }
