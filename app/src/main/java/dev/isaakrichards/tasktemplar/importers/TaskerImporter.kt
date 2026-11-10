@@ -406,6 +406,12 @@ object TaskerImporter {
                     "op" to if (code == 888) "increment" else "decrement", "value" to (a.iRaw(1).ifBlank { "1" }).let { text(it) },
                 ),
             )
+            545 -> one(
+                s(
+                    "set_variable", "scope" to scopeOf(a.s(0)), "name" to varName(a.s(0)), "type" to "integer", "op" to "random",
+                    "min" to text(a.iRaw(1).ifBlank { a.s(1) }.ifBlank { "0" }), "max" to text(a.iRaw(2).ifBlank { a.s(2) }.ifBlank { "100" }),
+                ),
+            )
             549 -> one(s("set_variable", "scope" to scopeOf(a.s(0)), "name" to varName(a.s(0)), "type" to "string", "op" to "set", "value" to ""))
             590 -> one(s("list_op", "scope" to scopeOf(a.s(0)), "name" to varName(a.s(0)), "op" to "split", "value" to text(a.s(0)), "separator" to a.s(1).ifEmpty { " " }))
                 .also { notes += "Variable Split now fills an array variable; read items with {lv=name[0]}" }

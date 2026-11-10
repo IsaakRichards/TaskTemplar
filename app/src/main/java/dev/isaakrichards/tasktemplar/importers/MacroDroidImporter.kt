@@ -542,6 +542,14 @@ object MacroDroidImporter {
         return when {
             a.bool("intValueIncrement") -> s("set_variable", "scope" to scope, "name" to name, "type" to type, "op" to "increment", "value" to "1")
             a.bool("intValueDecrement") -> s("set_variable", "scope" to scope, "name" to name, "type" to type, "op" to "decrement", "value" to "1")
+            a.bool("intRandom") || a.bool("doubleRandom") -> {
+                val dec = type == "decimal"
+                s(
+                    "set_variable", "scope" to scope, "name" to name, "type" to type, "op" to "random",
+                    "min" to a.str(if (dec) "doubleRandomMin" else "intRandomMin", "0"),
+                    "max" to a.str(if (dec) "doubleRandomMax" else "intRandomMax", "100"),
+                )
+            }
             a.str("expression").isNotBlank() -> s("set_variable", "scope" to scope, "name" to name, "type" to type, "op" to "set", "value" to text(a.str("expression")))
             else -> {
                 val value = when (type) {

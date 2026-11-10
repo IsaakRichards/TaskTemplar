@@ -255,4 +255,42 @@ class ImportersTest {
         assertEquals("{v=Home} {lv=x} {battery} {lv=arr[0]} {v=LIST[#]}", TaskerImporter.text("%Home %x %BATT %arr(1) %LIST(#)"))
         assertEquals("{v=a} {lv=b} {text} [unknown_code]", MacroDroidImporter.text("[v=a] [lv=b] [sms_message] [unknown_code]"))
     }
+
+    @Test fun randomVariablesImport() {
+        val md = MacroDroidImporter.parse(
+            """
+            { "macroList": [ { "m_name": "Dice", "m_triggerList": [ { "m_classType": "ShakeDeviceTrigger" } ], "m_constraintList": [],
+              "m_actionList": [ { "m_classType": "SetVariableAction", "m_variable": { "m_name": "roll", "m_type": 1 },
+                "m_intRandom": true, "m_intRandomMin": 1, "m_intRandomMax": 6 } ] } ] }
+            """.trimIndent(),
+        )
+        val a = md.macros.single().actions.single()
+        assertEquals("random", a.params["op"])
+        assertEquals("1", a.params["min"])
+        assertEquals("6", a.params["max"])
+
+        val tk = TaskerImporter.parse(
+            """
+            <TaskerData sr="" dvi="1" tv="6.3.13">
+              <Task sr="task9"><id>9</id><nme>Dice</nme>
+                <Action sr="act0" ve="7"><code>545</code><Str sr="arg0" ve="3">%roll</Str><Int sr="arg1" val="1"/><Int sr="arg2" val="6"/></Action>
+              </Task>
+            </TaskerData>
+            """.trimIndent(),
+        )
+        val t = tk.macros.single().actions.single()
+        assertEquals("set_variable", t.type)
+        assertEquals(listOf("random", "1", "6", "roll"), listOf(t.params["op"], t.params["min"], t.params["max"], t.params["name"]))
+    }
+
+    @Test fun randomRangeStaysInBounds() {
+        val rng = kotlin.random.Random(42)
+        val ints = (1..2000).map { dev.isaakrichards.tasktemplar.engine.RandomRange.pick(1.0, 6.0, "integer", rng).toInt() }
+        assertEquals((1..6).toSet(), ints.toSet())
+        repeat(2000) {
+            val d = dev.isaakrichards.tasktemplar.engine.RandomRange.pick(-2.5, 2.5, "decimal", rng).toDouble()
+            assertTrue(d in -2.5..2.5)
+        }
+        assertEquals("7", dev.isaakrichards.tasktemplar.engine.RandomRange.pick(7.0, 7.0, "integer", rng))
+    }
 }

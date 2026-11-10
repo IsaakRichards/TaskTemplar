@@ -17,7 +17,7 @@ List compiled from MacroDroid's published component names; it grows as gaps are 
 **User input:** [x] Shortcut / home-screen launcher · [x] Floating button · [x] Quick-settings tile · [x] Widget button · [x] Webhook (local network, no cloud) · [x] Empty trigger (macro with no triggers = manual) · [x] Text input dialog
 
 ## Actions
-**Logic & flow:** [x] Wait · [x] If / Else If / Else / End If · [x] Loop / Break / Continue · [x] Set variable (int, bool, string, decimal) · [x] Array / dictionary variables · [x] Confirm-next / If confirmed · [x] Run another macro · [x] Enable/disable macro · [x] Cancel running actions · [x] Text manipulation · [x] Action blocks · [x] Log · [x] Clear log
+**Logic & flow:** [x] Wait · [x] If / Else If / Else / End If · [x] Loop / Break / Continue · [x] Set variable (int, bool, string, decimal, random in range) · [x] Array / dictionary variables · [x] Confirm-next / If confirmed · [x] Run another macro · [x] Enable/disable macro · [x] Cancel running actions · [x] Text manipulation · [x] Action blocks · [x] Log · [x] Clear log
 **Notify:** [x] Notification · [x] Toast · [x] Speak text · [x] Vibrate · [x] Say time · [x] Message dialog · [x] Option dialog · [x] Clear notifications · [x] Notification LED (phones that still have one) · [x] Notification interaction (press button / reply)
 **Volume & sound:** [x] Ringer mode · [x] DND · [x] Set volume · [x] Volume up/down · [x] Speakerphone · [x] Play/stop sound · [x] Set ringtone / notification sound · [x] Silent - vibrate off (vibrate when ringing)
 **Media:** [x] Media control (play/pause/next) · [x] Record microphone · [x] Take picture · [x] Upload photo

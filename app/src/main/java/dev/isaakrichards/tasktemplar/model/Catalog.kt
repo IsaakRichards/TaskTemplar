@@ -353,7 +353,7 @@ object Catalog {
         StepSpec("stop", A, "Logic", "Stop this macro", "Ends the macro here.") { "Stop" },
 
         StepSpec(
-            "set_variable", A, "Variables", "Set variable", "Creates or changes a variable. Number values accept math like {v=count} * 2 + 1.",
+            "set_variable", A, "Variables", "Set variable", "Creates or changes a variable. Number values accept math like {v=count} * 2 + 1. “Random in range” picks a number between Min and Max (inclusive for integers; decimals get 2 places; true/false flips a coin).",
             listOf(
                 scopeChoice,
                 ParamSpec("name", "Variable name", ParamKind.TEXT),
@@ -363,9 +363,11 @@ object Catalog {
                 ),
                 ParamSpec(
                     "op", "Operation", ParamKind.CHOICE, "set",
-                    listOf("set" to "Set to value", "increment" to "Add value (default 1)", "decrement" to "Subtract value (default 1)", "toggle" to "Toggle true/false", "append" to "Append text"),
+                    listOf("set" to "Set to value", "increment" to "Add value (default 1)", "decrement" to "Subtract value (default 1)", "toggle" to "Toggle true/false", "append" to "Append text", "random" to "Random in range"),
                 ),
                 ParamSpec("value", "Value", ParamKind.TEXT, optional = true, hint = "Magic text and math allowed"),
+                ParamSpec("min", "Min (for random)", ParamKind.TEXT, "1", hint = "Lowest value · magic text and math allowed", optional = true),
+                ParamSpec("max", "Max (for random)", ParamKind.TEXT, "100", hint = "Highest value · magic text and math allowed", optional = true),
             ),
         ) { s ->
             when (s.p("op", "set")) {
@@ -373,6 +375,8 @@ object Catalog {
                 "decrement" -> "${varRef(s)} -= ${s.p("value", "1")}"
                 "toggle" -> "Toggle ${varRef(s)}"
                 "append" -> "${varRef(s)} += \"${s.p("value")}\""
+                "random" -> if (s.p("type", "integer") == "boolean") "${varRef(s)} = random true/false"
+                else "${varRef(s)} = random ${s.p("min", "1")}…${s.p("max", "100")}"
                 else -> "${varRef(s)} = ${s.p("value")}"
             }
         },

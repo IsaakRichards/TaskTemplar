@@ -305,6 +305,7 @@ object MacroEngine {
             "decrement" -> VarTypes.format(num(current) - (VarTypes.eval(raw) ?: 1.0), type)
             "toggle" -> (!VarTypes.truthy(current)).toString()
             "append" -> current + raw
+            "random" -> randomValue(step, vars, type)
             else -> when (type) {
                 VarTypes.INTEGER, VarTypes.DECIMAL ->
                     VarTypes.eval(raw)?.let { VarTypes.format(it, type) } ?: error("“$raw” isn't a number")
@@ -313,6 +314,20 @@ object MacroEngine {
         }
         assign(step, vars, type, next)
         return null
+    }
+
+    /** Picks a random value: integers are inclusive of both ends, decimals fall in [min, max), booleans are a coin flip. */
+    private fun randomValue(step: Step, vars: MutableMap<String, String>, type: String): String {
+        if (type == VarTypes.BOOLEAN) return kotlin.random.Random.nextBoolean().toString()
+        if (type != VarTypes.INTEGER && type != VarTypes.DECIMAL) error("Random in range needs an Integer or Decimal variable")
+        fun bound(key: String, def: String): Double {
+            val text = MagicText.apply(step.params[key]?.takeIf { it.isNotBlank() } ?: def, vars)
+            return VarTypes.eval(text) ?: error("Random $key “$text” isn't a number")
+        }
+        var lo = bound("min", "1")
+        var hi = bound("max", "100")
+        if (lo > hi) lo = hi.also { hi = lo }
+        return RandomRange.pick(lo, hi, type)
     }
 
     private fun assign(step: Step, vars: MutableMap<String, String>, type: String, value: String) {

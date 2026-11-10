@@ -119,3 +119,17 @@ object VarTypes {
         }
     }
 }
+
+/** Random numbers within a range, kept pure so it can be unit tested. */
+object RandomRange {
+    fun pick(lo: Double, hi: Double, type: String, rng: kotlin.random.Random = kotlin.random.Random): String =
+        if (type == VarTypes.INTEGER) {
+            val a = Math.ceil(lo).toLong()
+            val b = Math.floor(hi).toLong()
+            if (a > b) error("No whole number between ${VarTypes.format(lo, VarTypes.DECIMAL)} and ${VarTypes.format(hi, VarTypes.DECIMAL)}")
+            (if (b == Long.MAX_VALUE) rng.nextLong(a, b) else rng.nextLong(a, b + 1)).toString()
+        } else {
+            val d = if (lo == hi) lo else rng.nextDouble(lo, hi)
+            VarTypes.format(java.math.BigDecimal(d).setScale(2, java.math.RoundingMode.HALF_UP).toDouble().coerceIn(lo, hi), VarTypes.DECIMAL)
+        }
+}
