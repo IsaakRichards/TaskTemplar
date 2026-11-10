@@ -314,4 +314,16 @@ class ImportersTest {
         assertEquals(0.0, w.seconds(-3.0, "s"), 1e-9)
         assertEquals(w.MAX_SECONDS, w.seconds(48.0, "h"), 1e-9)
     }
+
+    @Test fun waitAcceptsBareVariableNames() {
+        val w = dev.isaakrichards.tasktemplar.engine.WaitTime
+        val vars = mapOf("delay" to "12", "half" to "2.5", "word" to "soon", "my delay" to "7")
+        assertEquals(12.0, w.amount("delay") { vars[it] }!!, 1e-9)
+        assertEquals(2.5, w.amount(" half ") { vars[it] }!!, 1e-9)
+        assertEquals(7.0, w.amount("my delay") { vars[it] }!!, 1e-9)
+        assertEquals(30.0, w.amount("30") { vars[it] }!!, 1e-9)
+        assertEquals(24.0, w.amount("12 * 2") { vars[it] }!!, 1e-9)
+        assertEquals(null, w.amount("word") { vars[it] })
+        assertEquals(null, w.amount("missing") { vars[it] })
+    }
 }

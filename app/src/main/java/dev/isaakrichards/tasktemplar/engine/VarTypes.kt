@@ -137,6 +137,14 @@ object RandomRange {
 /** Converts a Wait length in the chosen unit to seconds, clamped to 0 … 24 hours. */
 object WaitTime {
     const val MAX_SECONDS = 86_400.0
+
+    /**
+     * Reads a Wait length: a number or math first, otherwise a bare variable name (like MacroDroid),
+     * looked up with [lookup] (local variables before global ones). Null when neither gives a number.
+     */
+    fun amount(raw: String, lookup: (String) -> String?): Double? =
+        VarTypes.eval(raw) ?: raw.trim().takeIf { it.isNotEmpty() }?.let(lookup)?.let { VarTypes.eval(it) }
+
     fun seconds(amount: Double, unit: String): Double = (amount * when (unit) {
         "ms" -> 0.001
         "min" -> 60.0

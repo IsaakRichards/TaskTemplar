@@ -16,6 +16,8 @@ data class ParamSpec(
     val choices: List<Pair<String, String>> = emptyList(),
     val hint: String = "",
     val optional: Boolean = false,
+    /** TEXT fields only: shows a button that fills the field with a number variable's name. */
+    val varPicker: Boolean = false,
 )
 
 data class StepSpec(
@@ -247,9 +249,9 @@ object Catalog {
             ),
         ) { "${it.p("method", "GET")} ${it.p("url")}" },
         StepSpec(
-            "wait", A, "Flow", "Wait", "Pauses before the next action. The length can be a variable or math, like {v=delay} * 2 (up to 24 hours).",
+            "wait", A, "Flow", "Wait", "Pauses before the next action. The length can be a number, a variable's name (pick one with the list button), or math like {v=delay} * 2. Up to 24 hours.",
             listOf(
-                ParamSpec("seconds", "Length", ParamKind.TEXT, "5", hint = "Number, variable or math, e.g. {v=delay}"),
+                ParamSpec("seconds", "Length", ParamKind.TEXT, "5", hint = "Number, variable name, or math", varPicker = true),
                 ParamSpec(
                     "unit", "Unit", ParamKind.CHOICE, "s",
                     listOf("ms" to "Milliseconds", "s" to "Seconds", "min" to "Minutes", "h" to "Hours"),

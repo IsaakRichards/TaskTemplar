@@ -33,6 +33,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import dev.isaakrichards.tasktemplar.data.MacroStore
+import dev.isaakrichards.tasktemplar.engine.VarTypes
+import dev.isaakrichards.tasktemplar.data.GlobalVars
+import androidx.compose.material.icons.automirrored.filled.List
 import dev.isaakrichards.tasktemplar.data.Places
 import dev.isaakrichards.tasktemplar.engine.Geo
 import dev.isaakrichards.tasktemplar.engine.GeoMath
@@ -111,7 +114,13 @@ fun TypePickerDialog(kind: StepKind, onPick: (StepSpec) -> Unit, onDismiss: () -
 }
 
 @Composable
-fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss: () -> Unit) {
+fun StepEditDialog(
+    spec: StepSpec,
+    step: Step,
+    onSave: (Step) -> Unit,
+    onDismiss: () -> Unit,
+    localVars: List<Pair<String, String>> = emptyList(),
+) {
     val values = remember(step) {
         mutableStateMapOf<String, String>().apply {
             spec.params.forEach { put(it.key, step.params[it.key] ?: it.default) }
@@ -119,6 +128,7 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
     }
     var appPickerFor by remember { mutableStateOf<String?>(null) }
     var macroPickerFor by remember { mutableStateOf<String?>(null) }
+    var varPickerFor by remember { mutableStateOf<String?>(null) }
     var conds by remember(step) { mutableStateOf(step.conditions) }
     var condMode by remember(step) { mutableStateOf(step.conditionMode) }
     var pickingCond by remember { mutableStateOf(false) }
@@ -141,6 +151,7 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
                         onChange = { values[ps.key] = it },
                         onPickApp = { appPickerFor = ps.key },
                         onPickMacro = { macroPickerFor = ps.key },
+                        onPickVariable = { varPickerFor = ps.key },
                     )
                 }
                 if (showConds) {
@@ -181,6 +192,7 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
             StepEditDialog(
                 spec = cspec,
                 step = cs,
+                localVars = localVars,
                 onDismiss = { editingCond = null },
                 onSave = { ns ->
                     conds = if (i in conds.indices) conds.toMutableList().also { it[i] = ns } else conds + ns
@@ -188,6 +200,17 @@ fun StepEditDialog(spec: StepSpec, step: Step, onSave: (Step) -> Unit, onDismiss
                 },
             )
         }
+    }
+
+    varPickerFor?.let { key ->
+        VariablePickerDialog(
+            localVars = localVars,
+            onPick = { name ->
+                values[key] = name
+                varPickerFor = null
+            },
+            onDismiss = { varPickerFor = null },
+        )
     }
 
     macroPickerFor?.let { key ->
@@ -219,6 +242,7 @@ private fun ParamField(
     onChange: (String) -> Unit,
     onPickApp: () -> Unit,
     onPickMacro: () -> Unit,
+    onPickVariable: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val label = spec.label + if (spec.optional) " (optional)" else ""
@@ -231,7 +255,12 @@ private fun ParamField(
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (spec.kind == ParamKind.NUMBER) KeyboardType.Number else KeyboardType.Text,
             ),
-            singleLine = spec.kind == ParamKind.NUMBER,
+            singleLine = spec.kind == ParamKind.NUMBER || spec.varPicker,
+            trailingIcon = if (spec.varPicker) ({
+                IconButton(onClick = onPickVariable) {
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Choose a variable")
+                }
+            }) else null,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -544,6 +573,55 @@ private fun ConditionsEditor(
             Icon(Icons.Default.Add, null)
             Text(" Add condition")
         }
+    }
+}
+
+/** Lists number variables — this macro's local ones, then globals — and returns the chosen name. */
+@Composable
+fun VariablePickerDialog(localVars: List<Pair<String, String>>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    val numeric = setOf(VarTypes.INTEGER, VarTypes.DECIMAL)
+    val globals by GlobalVars.vars.collectAsState()
+    val globalList = globals.values.filter { it.type in numeric }.sortedBy { it.name.lowercase() }
+    val locals = localVars.filter { it.second in numeric }.map { it.first }.distinct()
+        .filter { n -> globalList.none { it.name == n } }.sortedBy { it.lowercase() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose variable") },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (globalList.isEmpty() && locals.isEmpty()) {
+                    item { Text("No number variables yet. Add a Set variable step (Integer or Decimal) first, or create one on the Variables screen.") }
+                }
+                if (locals.isNotEmpty()) {
+                    item { VarHeader("Local (this macro)") }
+                    items(locals, key = { "l:$it" }) { n -> VarRow(n, "set in this macro") { onPick(n) } }
+                }
+                if (globalList.isNotEmpty()) {
+                    item { VarHeader("Global") }
+                    items(globalList, key = { "g:${it.name}" }) { v -> VarRow(v.name, "now ${v.value.ifBlank { "empty" }}") { onPick(v.name) } }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun VarHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun VarRow(name: String, detail: String, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 8.dp)) {
+        Text(name, style = MaterialTheme.typography.titleSmall)
+        Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

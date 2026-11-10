@@ -219,7 +219,8 @@ object Actions {
 
             "wait" -> {
                 val raw = t("seconds", "5")
-                val amount = VarTypes.eval(raw) ?: error("Wait length “$raw” isn't a number")
+                val amount = WaitTime.amount(raw) { name -> vars[name] ?: dev.isaakrichards.tasktemplar.data.GlobalVars.get(name)?.value }
+                    ?: error("Wait length “$raw” isn't a number or a number variable")
                 delay((WaitTime.seconds(amount, step.p("unit", "s")) * 1000).toLong())
                 null
             }

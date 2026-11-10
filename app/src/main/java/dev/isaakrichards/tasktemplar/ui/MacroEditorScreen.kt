@@ -236,6 +236,9 @@ fun MacroEditorScreen(
             StepEditDialog(
                 spec = spec,
                 step = e.step,
+                localVars = macro.actions
+                    .filter { it.params["scope"] == "local" && !(it.params["name"] ?: "").contains('{') }
+                    .mapNotNull { st -> st.params["name"]?.trim()?.takeIf { it.isNotEmpty() }?.let { it to (st.params["type"] ?: "") } },
                 onDismiss = { editing = null },
                 onSave = { s ->
                     putStep(e.kind, e.index, s)
