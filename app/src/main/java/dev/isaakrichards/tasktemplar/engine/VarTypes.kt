@@ -133,3 +133,14 @@ object RandomRange {
             VarTypes.format(java.math.BigDecimal(d).setScale(2, java.math.RoundingMode.HALF_UP).toDouble().coerceIn(lo, hi), VarTypes.DECIMAL)
         }
 }
+
+/** Converts a Wait length in the chosen unit to seconds, clamped to 0 … 24 hours. */
+object WaitTime {
+    const val MAX_SECONDS = 86_400.0
+    fun seconds(amount: Double, unit: String): Double = (amount * when (unit) {
+        "ms" -> 0.001
+        "min" -> 60.0
+        "h" -> 3600.0
+        else -> 1.0
+    }).coerceIn(0.0, MAX_SECONDS)
+}

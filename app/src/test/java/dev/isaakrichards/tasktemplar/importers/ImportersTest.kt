@@ -293,4 +293,25 @@ class ImportersTest {
         }
         assertEquals("7", dev.isaakrichards.tasktemplar.engine.RandomRange.pick(7.0, 7.0, "integer", rng))
     }
+
+    @Test fun variableWaitImportsAndConverts() {
+        val tk = TaskerImporter.parse(
+            """
+            <TaskerData sr="" dvi="1" tv="6.3.13">
+              <Task sr="task9"><id>9</id><nme>Pause</nme>
+                <Action sr="act0" ve="7"><code>30</code><Int sr="arg0" val="0"/><Int sr="arg1" val="30"/><Int sr="arg2"><var>%delay</var></Int><Int sr="arg3" val="0"/><Int sr="arg4" val="0"/></Action>
+              </Task>
+            </TaskerData>
+            """.trimIndent(),
+        )
+        assertEquals("{lv=delay} * 60 + 30", tk.macros.single().actions.single().params["seconds"])
+
+        val w = dev.isaakrichards.tasktemplar.engine.WaitTime
+        assertEquals(90.0, w.seconds(1.5, "min"), 1e-9)
+        assertEquals(0.25, w.seconds(250.0, "ms"), 1e-9)
+        assertEquals(7200.0, w.seconds(2.0, "h"), 1e-9)
+        assertEquals(5.0, w.seconds(5.0, ""), 1e-9)
+        assertEquals(0.0, w.seconds(-3.0, "s"), 1e-9)
+        assertEquals(w.MAX_SECONDS, w.seconds(48.0, "h"), 1e-9)
+    }
 }

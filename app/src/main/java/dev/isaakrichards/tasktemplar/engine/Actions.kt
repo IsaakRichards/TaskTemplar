@@ -218,8 +218,9 @@ object Actions {
             "http" -> http(step.p("method", "GET"), t("url"), t("body"), vars)
 
             "wait" -> {
-                val s = (step.p("seconds", "5").toDoubleOrNull() ?: 5.0).coerceIn(0.0, 3600.0)
-                delay((s * 1000).toLong())
+                val raw = t("seconds", "5")
+                val amount = VarTypes.eval(raw) ?: error("Wait length “$raw” isn't a number")
+                delay((WaitTime.seconds(amount, step.p("unit", "s")) * 1000).toLong())
                 null
             }
 

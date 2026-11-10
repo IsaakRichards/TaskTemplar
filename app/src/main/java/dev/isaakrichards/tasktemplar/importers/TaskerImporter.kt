@@ -391,8 +391,18 @@ object TaskerImporter {
             40 -> one(s("end_loop"))
             137 -> one(s("stop"))
             30 -> {
-                val secs = a.i(0) / 1000.0 + a.i(1) + a.i(2) * 60 + a.i(3) * 3600 + a.i(4) * 86400
-                one(s("wait", "seconds" to VarFmt.num(secs)))
+                val factors = listOf(0.001, 1.0, 60.0, 3600.0, 86400.0)
+                val vars = (0..4).filter { a.iRaw(it).contains('%') }
+                if (vars.isEmpty()) {
+                    val secs = a.i(0) / 1000.0 + a.i(1) + a.i(2) * 60 + a.i(3) * 3600 + a.i(4) * 86400
+                    one(s("wait", "seconds" to VarFmt.num(secs)))
+                } else {
+                    // Variable waits become a math expression in seconds, e.g. "{lv=delay} * 60 + 30"
+                    val fixed = (0..4).filter { it !in vars }.sumOf { a.i(it) * factors[it] }
+                    val parts = vars.map { i -> text(a.iRaw(i)).let { if (factors[i] == 1.0) it else "$it * ${VarFmt.num(factors[i])}" } } +
+                        listOfNotNull(VarFmt.num(fixed).takeIf { fixed != 0.0 })
+                    one(s("wait", "seconds" to parts.joinToString(" + "), "unit" to "s"))
+                }
             }
             547 -> one(
                 s(

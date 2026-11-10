@@ -247,9 +247,15 @@ object Catalog {
             ),
         ) { "${it.p("method", "GET")} ${it.p("url")}" },
         StepSpec(
-            "wait", A, "Flow", "Wait", "Pauses before the next action.",
-            listOf(ParamSpec("seconds", "Seconds", ParamKind.NUMBER, "5")),
-        ) { "${it.p("seconds", "5")} s" },
+            "wait", A, "Flow", "Wait", "Pauses before the next action. The length can be a variable or math, like {v=delay} * 2 (up to 24 hours).",
+            listOf(
+                ParamSpec("seconds", "Length", ParamKind.TEXT, "5", hint = "Number, variable or math, e.g. {v=delay}"),
+                ParamSpec(
+                    "unit", "Unit", ParamKind.CHOICE, "s",
+                    listOf("ms" to "Milliseconds", "s" to "Seconds", "min" to "Minutes", "h" to "Hours"),
+                ),
+            ),
+        ) { "${it.p("seconds", "5")} ${it.p("unit", "s")}" },
     )
 
     // ---- Stage 1: variables, logic and macro control ----
